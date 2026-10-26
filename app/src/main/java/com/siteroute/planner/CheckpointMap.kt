@@ -14,6 +14,7 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
@@ -57,7 +58,10 @@ fun CheckpointMap(
 ) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
-    val view = remember { MapView(context).apply { onCreate(null) } }
+    val view = remember {
+        // TextureView composites reliably inside Jetpack Compose on Android devices.
+        MapView(context, MapLibreMapOptions().textureMode(true)).apply { onCreate(null) }
+    }
     val onClick by rememberUpdatedState(onSiteTap)
     var mapObject by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
