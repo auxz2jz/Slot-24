@@ -7,12 +7,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 /**
- * Shows the acquired phone position and nearby business/street-address choices
- * on a real map. Selecting a choice fills the existing SiteEditor; the user still
- * confirms Save so a wrong map candidate doesn't silently create a stop.
+ * GPS is not a postal address: user can tap a house or business on the zoomable map,
+ * select an OSM address/place nearby, or choose precisely the tapped point.
  */
 @Composable
 fun NearbyGpsPicker(
@@ -25,8 +26,10 @@ fun NearbyGpsPicker(
     var searching by remember(gps) { mutableStateOf(true) }
     var selectedId by remember(gps) { mutableStateOf("gps") }
     var retry by remember(gps) { mutableIntStateOf(0) }
+    var tappedPoint by remember(gps) { mutableStateOf<GeoPoint?>(null) }
+    var tapAddresses by remember(gps) { mutableStateOf<List<NearbyPlace>>(emptyList()) }
+    var tapLoading by remember(gps) { mutableStateOf(false) }
     val origin = remember(gps) { NearbyPlaces.gpsOption(gps) }
-    val places = listOf(origin) + result?.places.orEmpty()
 
     LaunchedEffect(gps, retry) {
         searching = true
@@ -34,33 +37,65 @@ fun NearbyGpsPicker(
             NearbyPlaces.search(context.applicationContext, gps)
         } catch (_: Exception) {
             NearbySearchResult(emptyList(),
-                "Nearby places unavailable. You can still save the exact GPS position.")
+                "Nearby data unavailable. You can still select exact GPS or tap any map position.")
         } finally {
             searching = false
         }
     }
 
-    val previewSites = places.mapIndexed { index, option ->
-        Site(
-            id = option.id,
-            listId = "preview",
-            name = option.name,
-            address = option.address,
-            latitude = option.location.latitude,
-            longitude = option.location.longitude,
-            position = index
-        )
+    LaunchedEffect(tappedPoint) {
+        val touched = tappedPoint ?: return@LaunchedEffect
+        tapLoading = true
+        tapAddresses = try {
+            NearbyPlaces.atMapTap(context.applicationContext, touched)
+        } catch (_: Exception) {
+            emptyList()
+        } finally {
+            tapLoading = false
+        }
+        // Favor a house-number address very close to the touched building.
+        val closest = (tapAddresses + result?.places.orEmpty())
+            .filter { candidate ->
+                val deltaLat = (candidate.location.latitude - touched.latitude) * 111000.0
+                val deltaLon = (candidate.location.longitude - touched.longitude) *
+                    111000.0 * kotlin.math.cos(Math.toRadians(touched.latitude))
+                kotlin.math.hypot(deltaLat, deltaLon) < 65.0 &&
+                    (candidate.category == "Nearby street address" ||
+                        candidate.category == "Street address")
+            }.minByOrNull {
+                kotlin.math.hypot(it.location.latitude - touched.latitude,
+                    it.location.longitude - touched.longitude)
+            }
+        selectedId = closest?.id ?: "tap-point"
+    }
+
+    val tapOption = tappedPoint?.let(NearbyPlaces::mapTapOption)
+    val places = (listOf(origin) + listOfNotNull(tapOption) +
+        tapAddresses + result?.places.orEmpty()).distinctBy { it.id }
+    val showPlaces = if (tappedPoint == null) places else {
+        val current = tappedPoint!!
+        listOfNotNull(tapOption) +
+            (tapAddresses + result?.places.orEmpty()).distinctBy { it.id }
+                .sortedBy { option ->
+                    val dLat = (option.location.latitude - current.latitude) * 111000.0
+                    val dLon = (option.location.longitude - current.longitude) *
+                        111000.0 * kotlin.math.cos(Math.toRadians(current.latitude))
+                    kotlin.math.hypot(dLat, dLon)
+                }.take(18) + origin
+    }
+    val previewSites = places.mapIndexed { index, place ->
+        Site(id = place.id, listId = "nearby", name = place.name,
+            address = place.address, latitude = place.location.latitude,
+            longitude = place.location.longitude, position = index)
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add stop near my GPS") },
+        title = { Text("Choose nearby address or GPS") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    String.format(Locale.US, "GPS: %.6f, %.6f", gps.latitude, gps.longitude),
-                    style = MaterialTheme.typography.bodySmall
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("Zoom in and tap a house, address, or business on the map.",
+                    style = MaterialTheme.typography.bodySmall)
                 CheckpointMap(
                     sites = previewSites,
                     selectedSiteId = selectedId,
@@ -68,73 +103,66 @@ fun NearbyGpsPicker(
                     currentLocation = gps,
                     roadRoute = null,
                     routeWaypoints = emptyList(),
-                    listId = "nearby-gps-${gps.latitude}-${gps.longitude}",
+                    listId = "gps-picker",
                     followMe = false,
                     refocusCount = retry,
                     onSiteTap = { selectedId = it },
-                    modifier = Modifier.fillMaxWidth().height(195.dp)
+                    onMapTap = { touched ->
+                        tappedPoint = touched
+                        selectedId = "tap-point"
+                        tapAddresses = emptyList()
+                    },
+                    pickerMode = true,
+                    modifier = Modifier.fillMaxWidth().height(238.dp)
                 )
-                if (searching) {
+                if (searching || tapLoading) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
-                    Text("Finding nearby businesses and addresses…",
+                    Text("Looking for nearby addresses and businesses…",
                         style = MaterialTheme.typography.bodySmall)
                 }
                 result?.warning?.let {
                     Text(it, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error)
                 }
-                Text("Choose a place below, or tap its numbered pin and Use Selected.",
-                    style = MaterialTheme.typography.bodySmall)
+                if (tappedPoint != null) {
+                    Text("Tap a listed address to select it, or use the exact tapped point.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 LazyColumn(
-                    Modifier.fillMaxWidth().heightIn(max = 180.dp),
+                    Modifier.fillMaxWidth().heightIn(max = 188.dp),
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    items(places, key = { it.id }) { place ->
+                    items(showPlaces.distinctBy { it.id }, key = { it.id }) { place ->
                         val selected = selectedId == place.id
-                        if (selected) {
-                            Button(
-                                onClick = { onSelect(place) },
-                                contentPadding = PaddingValues(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(Modifier.fillMaxWidth()) {
-                                    Text(place.name)
-                                    if (place.address.isNotBlank() && place.address != place.name) {
-                                        Text(place.address,
-                                            style = MaterialTheme.typography.labelSmall)
-                                    }
-                                    if (place.id != "gps") {
-                                        Text("${place.category} • approx. ${place.metersFromGps} m away",
-                                            style = MaterialTheme.typography.labelSmall)
-                                    }
+                        OutlinedButton(
+                            onClick = { selectedId = place.id },
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(8.dp),
+                            colors = if (selected) ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ) else ButtonDefaults.outlinedButtonColors()
+                        ) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(place.name)
+                                if (place.address.isNotBlank() && place.address != place.name) {
+                                    Text(place.address,
+                                        style = MaterialTheme.typography.labelSmall)
                                 }
-                            }
-                        } else {
-                            OutlinedButton(
-                                onClick = { onSelect(place) },
-                                contentPadding = PaddingValues(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(Modifier.fillMaxWidth()) {
-                                    Text(place.name)
-                                    if (place.address.isNotBlank() && place.address != place.name) {
-                                        Text(place.address,
-                                            style = MaterialTheme.typography.labelSmall)
-                                    }
-                                    if (place.id != "gps") {
-                                        Text("${place.category} • approx. ${place.metersFromGps} m away",
-                                            style = MaterialTheme.typography.labelSmall)
-                                    }
-                                }
+                                Text(
+                                    if (place.id == "tap-point" || place.id == "gps")
+                                        String.format(Locale.US, "%.6f, %.6f",
+                                            place.location.latitude, place.location.longitude)
+                                    else place.category,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
                             }
                         }
                     }
                 }
-                Text(
-                    "Business names from OpenStreetMap may be incomplete. " +
-                        "Searching sends this GPS position to a public map-data server.",
-                    style = MaterialTheme.typography.labelSmall
-                )
+                Text("Nearby addresses depend on mapped building data and geocoder coverage. " +
+                    "Tap locations may be approximate. Your selected map point is sent to " +
+                    "Android's geocoder for address lookup.",
+                    style = MaterialTheme.typography.labelSmall)
             }
         },
         confirmButton = {
@@ -144,9 +172,12 @@ fun NearbyGpsPicker(
         },
         dismissButton = {
             Row {
-                TextButton(onClick = { retry++ }, enabled = !searching) {
-                    Text("Search again")
-                }
+                TextButton(onClick = {
+                    tappedPoint = null
+                    tapAddresses = emptyList()
+                    selectedId = "gps"
+                    retry++
+                }, enabled = !searching) { Text("Recenter") }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         }

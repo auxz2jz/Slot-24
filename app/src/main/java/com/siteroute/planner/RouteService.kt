@@ -13,11 +13,18 @@ data class RoadLeg(
     val instructions: List<String>
 )
 
+data class RouteManeuver(
+    val location: GeoPoint,
+    val instruction: String,
+    val kind: String
+)
+
 data class RoadRoute(
     val geometry: List<GeoPoint>,
     val legs: List<RoadLeg>,
     val distanceMeters: Double,
-    val durationSeconds: Double
+    val durationSeconds: Double,
+    val maneuvers: List<RouteManeuver> = emptyList()
 )
 
 /**
@@ -62,12 +69,22 @@ object RouteService {
         }
         require(geometry.size >= 2) { "Road routing returned no usable path" }
         val legsArray = route.getJSONArray("legs")
+        val maneuverList = mutableListOf<RouteManeuver>()
         val legs = (0 until legsArray.length()).map { i ->
             val leg = legsArray.getJSONObject(i)
             val steps = leg.optJSONArray("steps")
             val instructions = if (steps == null) emptyList() else {
                 (0 until steps.length()).map { n ->
-                    formatStep(steps.getJSONObject(n))
+                    val step = steps.getJSONObject(n)
+                    val maneuver = step.getJSONObject("maneuver")
+                    val location = maneuver.optJSONArray("location")
+                    if (location != null && location.length() >= 2) {
+                        maneuverList += RouteManeuver(
+                            GeoPoint(location.getDouble(1), location.getDouble(0)),
+                            formatStep(step), maneuver.optString("type")
+                        )
+                    }
+                    formatStep(step)
                 }.filter { it.isNotBlank() }
             }
             RoadLeg(
@@ -80,7 +97,8 @@ object RouteService {
             geometry = geometry,
             legs = legs,
             distanceMeters = route.getDouble("distance"),
-            durationSeconds = route.getDouble("duration")
+            durationSeconds = route.getDouble("duration"),
+            maneuvers = maneuverList
         )
     }
 

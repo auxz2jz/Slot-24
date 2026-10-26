@@ -47,6 +47,8 @@ fun RoutePlannerScreen() {
     var manageStops by remember { mutableStateOf(false) }
     var showTurns by remember { mutableStateOf(false) }
     var followMe by remember { mutableStateOf(false) }
+    var headingUp by remember { mutableStateOf(true) }
+    var voiceEnabled by remember { mutableStateOf(false) }
     var refocusCount by remember { mutableIntStateOf(0) }
     var backupMenu by remember { mutableStateOf(false) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
@@ -148,6 +150,8 @@ fun RoutePlannerScreen() {
     }
 
     var livePosition by remember { mutableStateOf<GeoPoint?>(null) }
+    var gpsCourse by remember { mutableStateOf<Float?>(null) }
+    var gpsAccuracy by remember { mutableStateOf<Float?>(null) }
     var routeOrigin by remember { mutableStateOf<GeoPoint?>(null) }
 
     fun navigateTo(siteId: String) {
@@ -155,7 +159,8 @@ fun RoutePlannerScreen() {
         routeOrigin = livePosition ?: routeOrigin
         selectedId = siteId
         directToSite = true
-        followMe = false
+        followMe = true
+        headingUp = true
         refocusCount++
     }
 
@@ -172,6 +177,12 @@ fun RoutePlannerScreen() {
             override fun onLocationChanged(location: Location) {
                 val fix = GeoPoint(location.latitude, location.longitude)
                 livePosition = fix
+                gpsAccuracy = if (location.hasAccuracy()) location.accuracy else null
+                gpsCourse = if (location.hasSpeed() && location.speed >= 1.5f &&
+                    location.hasBearing() &&
+                    (!location.hasBearingAccuracy() ||
+                        location.bearingAccuracyDegrees <= 45f))
+                    location.bearing else null
                 val last = routeOrigin
                 if (last == null) {
                     routeOrigin = fix
@@ -208,6 +219,11 @@ fun RoutePlannerScreen() {
         }
         onDispose { manager.removeUpdates(listener) }
     }
+
+    val compassHeading = rememberCompassHeading(
+        enabled = directToSite && followMe, position = livePosition
+    )
+    val directionDegrees = gpsCourse ?: compassHeading
 
     var roadRoute by remember { mutableStateOf<RoadRoute?>(null) }
     var routeError by remember { mutableStateOf<String?>(null) }
@@ -246,6 +262,13 @@ fun RoutePlannerScreen() {
             }
         }
     }
+
+    SpokenTurnGuidance(
+        enabled = voiceEnabled && directToSite && followMe,
+        route = roadRoute,
+        gps = livePosition,
+        accuracyMeters = gpsAccuracy
+    )
 
     fun finishStop(site: Site, status: String) {
         val updated = data.copy(sites = data.sites.map {
@@ -358,10 +381,27 @@ fun RoutePlannerScreen() {
                 routeWaypoints = routeWaypoints,
                 listId = data.activeListId,
                 followMe = followMe,
+                headingUp = headingUp && directToSite,
+                headingDegrees = directionDegrees,
                 refocusCount = refocusCount,
                 onSiteTap = { navigateTo(it) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
+            if (directToSite) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = {
+                        headingUp = !headingUp
+                        followMe = true
+                    }) { Text(if (headingUp) "Heading up ✓" else "North up") }
+                    TextButton(onClick = { voiceEnabled = !voiceEnabled }) {
+                        Text(if (voiceEnabled) "Voice ON" else "Voice OFF")
+                    }
+                    if (directionDegrees == null) {
+                        Text("Finding heading…", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
             Text(
                 (if (directToSite) "To selected site" else "Full route") +
                     " • ${allSites.size} pins • Blue = road, orange dashes = sequence only",
