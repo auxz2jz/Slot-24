@@ -185,7 +185,7 @@ fun RoutePlannerScreen() {
         refocusCount++
     }
 
-    val isDirectNavigation by rememberUpdatedState(directToSite)
+    val isFollowingNavigation by rememberUpdatedState(followMe)
 
     DisposableEffect(hasLocationPermission) {
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -211,7 +211,7 @@ fun RoutePlannerScreen() {
                     // The full-route overview refreshes occasionally as before.
                     // During active turn-by-turn navigation, only a confirmed
                     // deviation requests a new road route to avoid server flooding.
-                    if (!isDirectNavigation && distance[0] >= 250f) routeOrigin = fix
+                    if (!isFollowingNavigation && distance[0] >= 250f) routeOrigin = fix
                 }
             }
         }
@@ -239,7 +239,7 @@ fun RoutePlannerScreen() {
     }
 
     val compassHeading = rememberCompassHeading(
-        enabled = directToSite && followMe, position = livePosition
+        enabled = followMe, position = livePosition
     )
     val directionDegrees = gpsCourse ?: compassHeading
 
@@ -252,12 +252,12 @@ fun RoutePlannerScreen() {
 
     // Two reliable off-road GPS fixes trigger rerouting immediately, instead of
     // waiting until we've moved 250 meters. Limit requests to the public demo API.
-    LaunchedEffect(directToSite, selectedId, data.activeListId) {
+    LaunchedEffect(directToSite, selectedId, data.activeListId, followMe) {
         offRouteFixes = 0
         rerouteStatus = null
     }
     LaunchedEffect(livePosition, gpsAccuracy) {
-        if (!directToSite || selectedId == null || routing || roadRoute == null) {
+        if (!followMe || routeSites.isEmpty() || routing || roadRoute == null) {
             offRouteFixes = 0
             return@LaunchedEffect
         }
@@ -326,7 +326,7 @@ fun RoutePlannerScreen() {
         }
     }
     SpokenTurnGuidance(
-        enabled = voiceEnabled && directToSite && followMe &&
+        enabled = voiceEnabled && followMe &&
             !RouteDeviation.offRoute(roadRoute, livePosition, gpsAccuracy),
         route = roadRoute,
         gps = livePosition,
@@ -423,7 +423,10 @@ fun RoutePlannerScreen() {
                     Text("Full route")
                 }
                 if (hasLocationPermission) {
-                    TextButton(onClick = { followMe = !followMe }) {
+                    TextButton(onClick = {
+                        followMe = !followMe
+                        if (followMe) headingUp = true
+                    }) {
                         Text(if (followMe) "Following" else "Follow GPS")
                     }
                 } else {
@@ -445,13 +448,13 @@ fun RoutePlannerScreen() {
                 routeWaypoints = routeWaypoints,
                 listId = data.activeListId,
                 followMe = followMe,
-                headingUp = headingUp && directToSite,
+                headingUp = headingUp && followMe,
                 headingDegrees = directionDegrees,
                 refocusCount = refocusCount,
                 onSiteTap = { navigateTo(it) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
-            if (directToSite) {
+            if (directToSite || followMe) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = {
