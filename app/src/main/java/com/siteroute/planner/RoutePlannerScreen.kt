@@ -235,7 +235,39 @@ fun RoutePlannerScreen() {
     }
 
     Scaffold(topBar = {
-        TopAppBar(title = { Text("Site Route Planner") })
+        TopAppBar(
+            title = { Text("Site Route Planner") },
+            actions = {
+                Box {
+                    TextButton(onClick = { backupMenu = true }) { Text("Backup") }
+                    DropdownMenu(
+                        expanded = backupMenu,
+                        onDismissRequest = { backupMenu = false }
+                    ) {
+                        DropdownMenuItem(text = { Text("Back up all routes to file") },
+                            onClick = {
+                                backupMenu = false
+                                try {
+                                    backupSnapshot = PlannerBackupCodec.encode(data)
+                                    val date = LocalDateTime.now().format(
+                                        DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm")
+                                    )
+                                    saveBackup.launch("site-routes-$date.json")
+                                } catch (e: Exception) {
+                                    backupMessage = e.message ?: "Could not prepare backup."
+                                }
+                            })
+                        DropdownMenuItem(text = { Text("Restore routes from file") },
+                            onClick = {
+                                backupMenu = false
+                                openBackup.launch(arrayOf(
+                                    "application/json", "text/plain", "application/octet-stream"
+                                ))
+                            })
+                    }
+                }
+            }
+        )
     }) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 10.dp)
@@ -271,7 +303,7 @@ fun RoutePlannerScreen() {
             ) {
                 Button(onClick = { addSite = true }) { Text("+ Site") }
                 OutlinedButton(onClick = { manageStops = true }) {
-                    Text("Stops (${pending.size})")
+                    Text("Stops (${allSites.size})")
                 }
                 OutlinedButton(onClick = {
                     followMe = false
@@ -291,6 +323,24 @@ fun RoutePlannerScreen() {
                 }
             }
 
+            if (allSites.isNotEmpty()) {
+                // Show the entire selected list in order, including visited/skipped stops.
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    allSites.forEachIndexed { index, stop ->
+                        AssistChip(
+                            onClick = { if (stop.status == "pending") selectedId = stop.id },
+                            label = {
+                                Text("${index + 1}. ${stop.name}" +
+                                    if (stop.status == "visited") " ✓" else
+                                    if (stop.status == "skipped") " –" else "")
+                            }
+                        )
+                    }
+                }
+            }
             CheckpointMap(
                 sites = allSites,
                 selectedSiteId = nextSite?.id,
@@ -378,6 +428,43 @@ fun RoutePlannerScreen() {
             }
             Spacer(Modifier.height(5.dp))
         }
+    }
+
+    if (backupMessage != null) {
+        AlertDialog(
+            onDismissRequest = { backupMessage = null },
+            title = { Text("Backup / Restore") },
+            text = { Text(backupMessage.orEmpty()) },
+            confirmButton = {
+                TextButton(onClick = { backupMessage = null }) { Text("OK") }
+            }
+        )
+    }
+    restoreCandidate?.let { candidate ->
+        AlertDialog(
+            onDismissRequest = { restoreCandidate = null },
+            title = { Text("Restore this backup?") },
+            text = {
+                Text("The file contains ${candidate.lists.size} routes and " +
+                    "${candidate.sites.size} stops. Restoring will REPLACE all " +
+                    "routes and progress currently saved on this device. " +
+                    "Make a backup of your current data first if you want to keep it.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    update(candidate)
+                    selectedId = null
+                    followMe = false
+                    refocusCount++
+                    restoreCandidate = null
+                    backupMessage = "Backup restored: ${candidate.lists.size} routes, " +
+                        "${candidate.sites.size} stops."
+                }) { Text("Replace and restore") }
+            },
+            dismissButton = {
+                TextButton(onClick = { restoreCandidate = null }) { Text("Cancel") }
+            }
+        )
     }
 
     if (showTurns) {
