@@ -123,20 +123,6 @@ fun RoutePlannerScreen() {
     // Overview connects pending checkpoints in the saved manual order.
     // Direct mode uses exactly two points: current GPS and the selected site.
 
-    fun navigateTo(siteId: String) {
-        selectedId = siteId
-        directToSite = true
-        followMe = false
-        refocusCount++
-    }
-
-    fun showFullRoute() {
-        selectedId = null
-        directToSite = false
-        followMe = false
-        refocusCount++
-    }
-
     val currentList = data.lists.firstOrNull { it.id == data.activeListId }
 
     var hasLocationPermission by remember {
@@ -163,6 +149,22 @@ fun RoutePlannerScreen() {
 
     var livePosition by remember { mutableStateOf<GeoPoint?>(null) }
     var routeOrigin by remember { mutableStateOf<GeoPoint?>(null) }
+
+    fun navigateTo(siteId: String) {
+        // Take the freshest GPS fix at the moment the user taps a destination.
+        routeOrigin = livePosition ?: routeOrigin
+        selectedId = siteId
+        directToSite = true
+        followMe = false
+        refocusCount++
+    }
+
+    fun showFullRoute() {
+        selectedId = null
+        directToSite = false
+        followMe = false
+        refocusCount++
+    }
 
     DisposableEffect(hasLocationPermission) {
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
