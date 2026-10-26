@@ -220,6 +220,11 @@ fun RoutePlannerScreen() {
         onDispose { manager.removeUpdates(listener) }
     }
 
+    val compassHeading = rememberCompassHeading(
+        enabled = directToSite && followMe, position = livePosition
+    )
+    val directionDegrees = gpsCourse ?: compassHeading
+
     var roadRoute by remember { mutableStateOf<RoadRoute?>(null) }
     var routeError by remember { mutableStateOf<String?>(null) }
     var routing by remember { mutableStateOf(false) }
@@ -257,6 +262,13 @@ fun RoutePlannerScreen() {
             }
         }
     }
+
+    SpokenTurnGuidance(
+        enabled = voiceEnabled && directToSite && followMe,
+        route = roadRoute,
+        gps = livePosition,
+        accuracyMeters = gpsAccuracy
+    )
 
     fun finishStop(site: Site, status: String) {
         val updated = data.copy(sites = data.sites.map {
@@ -369,6 +381,8 @@ fun RoutePlannerScreen() {
                 routeWaypoints = routeWaypoints,
                 listId = data.activeListId,
                 followMe = followMe,
+                headingUp = headingUp && directToSite,
+                headingDegrees = directionDegrees,
                 refocusCount = refocusCount,
                 onSiteTap = { navigateTo(it) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
