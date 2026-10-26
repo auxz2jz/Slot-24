@@ -33,16 +33,16 @@ jobs:
           name: site-route-planner-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
-      - name: Publish version 0.8 debug APK to GitHub Releases
+      - name: Publish version 0.9 debug APK to GitHub Releases
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          APK="app/build/outputs/apk/debug/app-debug.apk#SiteRoutePlanner-v0.8.apk"
-          if gh release view v0.8.0 >/dev/null 2>&1; then
-            gh release upload v0.8.0 "$APK" --clobber
+          APK="app/build/outputs/apk/debug/app-debug.apk#SiteRoutePlanner-v0.9.apk"
+          if gh release view v0.9.0 >/dev/null 2>&1; then
+            gh release upload v0.9.0 "$APK" --clobber
           else
-            gh release create v0.8.0 "$APK" --target "$GITHUB_SHA" \
-              --title "Site Route Planner v0.8" \
-              --notes "Debug APK for personal testing. Adds GPS-based off-route automatic recalculation and voice selection, preview, speed/pitch with Android speech engines; previous maps and backup features remain. Keeps backup, ordered route and in-app navigation. Backup/restore and map rendering fixes remain. Android 8+. APK debug signing may differ from previous builds; do not uninstall an older app containing important stops without a backup."
+            gh release create v0.9.0 "$APK" --target "$GITHUB_SHA" \
+              --title "Site Route Planner v0.9" \
+              --notes "Debug APK for personal testing. Fixes portrait-landscape rotation resetting current navigation, preserves selected checkpoint and GPS-follow state, and adds compact landscape map-focused controls. Keeps backup, ordered route and in-app navigation. Backup/restore and map rendering fixes remain. Android 8+. APK debug signing may differ from previous builds; do not uninstall an older app containing important stops without a backup."
           fi
