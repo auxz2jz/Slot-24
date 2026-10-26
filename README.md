@@ -1,4 +1,4 @@
-# Site Route Planner v0.7 (Android)
+# Site Route Planner v0.8 (Android)
 
 **Native Android APK — in-app waypoint map and driving-road route.**
 
@@ -10,6 +10,13 @@
 - Restoration is replace-all (not merge). Back up your current data before restoring an older file.
 - Backups are manually saved; no automatic sync, cloud account, or scheduled cloud backup exists. The chosen document provider may upload the file depending on where you save it.
 - Existing Android app data can be lost when uninstalling or replacing apps signed with a different debug key. Make a backup using an already installed compatible version before uninstalling. **Version 0.2 does not contain an export feature**, so a failed APK update may require manually re-entering stops into 0.3.
+
+## Auto-reroute and voice choices (v0.8)
+- While following a single stop, the app checks fresh GPS positions against the **full blue road polyline**, measuring distance to each road segment. If **two consecutive GPS fixes** (normally around 3–6 seconds) with accuracy of 35 m or better lie over **45 m away from the route**, the app recalculates a new road route from your current position to the **same stop**. GPS error can delay or falsely trigger rerouting; the app never assumes a safe or legal maneuver.
+- Automatic retry requests are spaced at least **12 seconds** apart to limit use of the public OSRM demonstration server. Actual recalculation time depends on the internet connection and public server availability; the app may be slower, offline, or unable to provide a replacement route.
+- The screen indicates **Recalculating from your current location**. The old blue road line is removed while fetching a replacement; an orange dashed line is only a checkpoint preview, never driving directions.
+- When navigating to a site, choose **Voices** to browse available voices from the Android device's current TTS engine, preview a sample, and adjust speed (0.7–1.3x) and pitch (0.8–1.2x). These choices are saved on this device. Voice ON still must be enabled separately. Online voices may need data. Higher-quality or neural voices must be installed by the user through their device's preferred TTS engine; this app does not license third-party cloud voices.
+- Experimental spoken turns are suppressed if GPS suggests you are off route or has poor accuracy. This is a prototype, **not** full commercial real-time navigation. Do not rely on it as the sole source of driving instructions.
 
 ## Tap a house or street address and heading-up navigation (v0.7)
 - In **+ Site → Use Current GPS / Nearby Places**, zoom in on the map and tap a building or road-adjacent point. The app reverse geocodes that tapped position using Android Geocoder and searches nearby OpenStreetMap records tagged with house number/street. Choose a suggested address, business, **Exact tapped map point**, or **Exact GPS position** and then save. A house street address is shown only where the map data or geocoder has it. No house number is invented from coordinates.
