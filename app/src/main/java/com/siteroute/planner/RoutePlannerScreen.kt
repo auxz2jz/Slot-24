@@ -9,10 +9,9 @@ import android.location.LocationManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,6 +38,7 @@ fun RoutePlannerScreen() {
     val store = remember { SiteStore(context.applicationContext) }
     var data by remember { mutableStateOf(store.load()) }
     var selectedId by remember { mutableStateOf<String?>(null) }
+    var directToSite by remember { mutableStateOf(false) }
     var listMenu by remember { mutableStateOf(false) }
     var addList by remember { mutableStateOf(false) }
     var deleteList by remember { mutableStateOf(false) }
@@ -114,14 +114,28 @@ fun RoutePlannerScreen() {
 
     val allSites = RouteLogic.orderedSites(data)
     val pending = allSites.filter { it.status == "pending" }
-    val nextSite = pending.firstOrNull { it.id == selectedId } ?: pending.firstOrNull()
-    val routeSites = if (nextSite == null) emptyList() else {
-        // Preserve the list's manual order, starting at the chosen next checkpoint.
-        val start = pending.indexOfFirst { it.id == nextSite.id }
-        pending.drop(start) + pending.take(start)
+    val nextSite = if (directToSite) {
+        allSites.firstOrNull { it.id == selectedId }
+    } else {
+        pending.firstOrNull()
     }
-    // Every route is displayed without needing GPS. With GPS, the first leg starts
-    // at the phone's position; without it, route between the saved stops still draws.
+    val routeSites = NavigationPlan.stops(allSites, selectedId, directToSite)
+    // Overview connects pending checkpoints in the saved manual order.
+    // Direct mode uses exactly two points: current GPS and the selected site.
+
+    fun navigateTo(siteId: String) {
+        selectedId = siteId
+        directToSite = true
+        followMe = false
+        refocusCount++
+    }
+
+    fun showFullRoute() {
+        selectedId = null
+        directToSite = false
+        followMe = false
+        refocusCount++
+    }
 
     val currentList = data.lists.firstOrNull { it.id == data.activeListId }
 
@@ -196,8 +210,9 @@ fun RoutePlannerScreen() {
     var roadRoute by remember { mutableStateOf<RoadRoute?>(null) }
     var routeError by remember { mutableStateOf<String?>(null) }
     var routing by remember { mutableStateOf(false) }
-    val routeWaypoints = (if (routeOrigin == null) emptyList()
-        else listOf(routeOrigin!!)) + routeSites.map { GeoPoint(it.latitude, it.longitude) }
+    val routeWaypoints = NavigationPlan.points(
+        routeOrigin, allSites, selectedId, directToSite
+    )
 
     LaunchedEffect(data.activeListId, routeWaypoints) {
         roadRoute = null
@@ -207,7 +222,11 @@ fun RoutePlannerScreen() {
             routeSites.isEmpty() -> routing = false
             points.size < 2 -> {
                 routing = false
-                routeError = "One checkpoint: enable GPS to route from your position. The pin should still appear on the map."
+                routeError = if (directToSite) {
+                    "Waiting for GPS. Enable Location to calculate a driving route from your position."
+                } else {
+                    "One checkpoint: enable GPS to route from your position. The pin remains on the map."
+                }
             }
             points.size > 25 -> {
                 routing = false
@@ -231,11 +250,13 @@ fun RoutePlannerScreen() {
             if (it.id == site.id) it.copy(status = status) else it
         })
         update(updated)
-        selectedId = if (site.id == nextSite?.id) {
-            routeSites.drop(1).firstOrNull { it.id != site.id }?.id
+        if (directToSite) {
+            selectedId = NavigationPlan.nextPendingAfter(updated, site.id)?.id
+            directToSite = selectedId != null
         } else {
-            nextSite?.id ?: RouteLogic.nextPending(updated)?.id
+            selectedId = null
         }
+        refocusCount++
     }
 
     Scaffold(topBar = {
