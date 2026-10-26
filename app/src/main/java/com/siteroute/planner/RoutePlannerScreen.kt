@@ -471,7 +471,38 @@ fun RoutePlannerScreen() {
                 onSiteTap = { navigateTo(it) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
-            if (directToSite || followMe) {
+            if (isLandscape) {
+                // Compact landscape driving layout: keep the blue map visible.
+                // Stop ordering/editing is still accessible from the Stops button above.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        (nextSite?.name ?: "No destination") +
+                            (roadRoute?.let { " • " + RouteService.minutes(it.durationSeconds) }
+                                ?: ""),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1
+                    )
+                    if (nextSite != null) {
+                        TextButton(onClick = { finishStop(nextSite, "visited") }) {
+                            Text("Done → Next")
+                        }
+                    }
+                    TextButton(onClick = {
+                        headingUp = !headingUp
+                        followMe = true
+                    }) { Text(if (headingUp) "Heading up" else "North up") }
+                    TextButton(onClick = { voiceEnabled = !voiceEnabled }) {
+                        Text(if (voiceEnabled) "Voice ON" else "Voice OFF")
+                    }
+                    TextButton(onClick = { voiceSettingsOpen = true }) { Text("Voices") }
+                }
+            } else {
+                if (directToSite || followMe) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = {
@@ -592,7 +623,8 @@ fun RoutePlannerScreen() {
                     ) { Text("Turns") }
                 }
             }
-            Spacer(Modifier.height(5.dp))
+                Spacer(Modifier.height(5.dp))
+            }
         }
     }
 
