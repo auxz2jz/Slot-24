@@ -30,6 +30,8 @@ A native Android application to organize stops you need to visit, see their loca
 4. Grant location access to Google Maps itself if prompted when launching driving directions. This app does not request location permission.
 5. Add a list, add a site, enter address or coordinates, and navigate.
 
+The repository also has a GitHub Actions workflow at `.github/workflows/android.yml` that attempts a debug APK build and unit tests on pushes to `main`. If the workflow succeeds, the APK is available as a short-lived Actions artifact; this has not yet been verified here.
+
 **Important:** A Gradle wrapper (`gradlew`, wrapper JAR, and properties) and APK are not included yet. Android Studio can open the Gradle project; generate a wrapper with an installed Gradle if required. The source has not been compiled or device-tested here.
 
 ## Navigation behavior
