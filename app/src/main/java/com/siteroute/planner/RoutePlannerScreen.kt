@@ -480,9 +480,9 @@ fun RoutePlannerScreen() {
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        (nextSite?.name ?: "No destination") +
+                        rerouteStatus ?: ((nextSite?.name ?: "No destination") +
                             (roadRoute?.let { " • " + RouteService.minutes(it.durationSeconds) }
-                                ?: ""),
+                                ?: "")),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1
