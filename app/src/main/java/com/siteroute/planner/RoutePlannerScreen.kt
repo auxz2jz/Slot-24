@@ -120,6 +120,9 @@ fun RoutePlannerScreen() {
         val start = pending.indexOfFirst { it.id == nextSite.id }
         pending.drop(start) + pending.take(start)
     }
+    // Every route is displayed without needing GPS. With GPS, the first leg starts
+    // at the phone's position; without it, route between the saved stops still draws.
+
     val currentList = data.lists.firstOrNull { it.id == data.activeListId }
 
     var hasLocationPermission by remember {
@@ -193,17 +196,18 @@ fun RoutePlannerScreen() {
     var roadRoute by remember { mutableStateOf<RoadRoute?>(null) }
     var routeError by remember { mutableStateOf<String?>(null) }
     var routing by remember { mutableStateOf(false) }
-    LaunchedEffect(data.activeListId, routeSites, routeOrigin) {
+    val routeWaypoints = (if (routeOrigin == null) emptyList()
+        else listOf(routeOrigin!!)) + routeSites.map { GeoPoint(it.latitude, it.longitude) }
+
+    LaunchedEffect(data.activeListId, routeWaypoints) {
         roadRoute = null
         routeError = null
-        val points = (if (routeOrigin == null) emptyList()
-            else listOf(routeOrigin!!)) +
-            routeSites.map { GeoPoint(it.latitude, it.longitude) }
+        val points = routeWaypoints
         when {
             routeSites.isEmpty() -> routing = false
             points.size < 2 -> {
                 routing = false
-                routeError = "Enable GPS to draw a road route to this checkpoint."
+                routeError = "One checkpoint: enable GPS to route from your position. The pin should still appear on the map."
             }
             points.size > 25 -> {
                 routing = false
@@ -214,7 +218,7 @@ fun RoutePlannerScreen() {
                 try {
                     roadRoute = withContext(Dispatchers.IO) { RouteService.buildRoute(points) }
                 } catch (e: Exception) {
-                    routeError = "Could not load the road route. Check the internet and try again."
+                    routeError = "Road directions unavailable. Orange dashed lines show checkpoint order only, NOT drivable roads."
                 } finally {
                     routing = false
                 }
@@ -346,6 +350,7 @@ fun RoutePlannerScreen() {
                 selectedSiteId = nextSite?.id,
                 currentLocation = livePosition,
                 roadRoute = roadRoute,
+                routeWaypoints = routeWaypoints,
                 listId = data.activeListId,
                 followMe = followMe,
                 refocusCount = refocusCount,
@@ -353,7 +358,7 @@ fun RoutePlannerScreen() {
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
             Text(
-                "Map: OpenFreeMap / OpenStreetMap • Road routing: OSRM",
+                "Pins: ${allSites.size} • Route: ${currentList?.name ?: "None"} • Blue = roads, dashed orange = order only",
                 style = MaterialTheme.typography.labelSmall
             )
             if (routing) {
