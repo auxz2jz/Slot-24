@@ -1,5 +1,10 @@
 package com.siteroute.planner
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -291,8 +296,48 @@ fun SiteEditor(
     var notes by remember(initial) { mutableStateOf(initial?.notes ?: "") }
     var error by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var gpsChoice by remember(initial) { mutableStateOf<GeoPoint?>(null) }
 
-    AlertDialog(
+    fun locateNow() {
+        busy = true
+        error = ""
+        scope.launch {
+            try {
+                gpsChoice = CurrentGps.locate(context)
+            } catch (e: Exception) {
+                error = e.message ?: "Couldn't get your location. Check GPS and permissions."
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    val locationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        if (granted.values.any { it }) locateNow()
+        else error = "Location permission is required. Enable it to use GPS/nearby places."
+    }
+
+    if (gpsChoice != null) {
+        NearbyGpsPicker(
+            gps = gpsChoice!!,
+            onSelect = { candidate ->
+                val point = candidate.location
+                lat = String.format(Locale.US, "%.6f", point.latitude)
+                lon = String.format(Locale.US, "%.6f", point.longitude)
+                address = candidate.address.ifBlank {
+                    if (candidate.id == "gps") "" else candidate.name
+                }
+                if (name.isBlank()) {
+                    name = if (candidate.id == "gps") "GPS stop" else candidate.name
+                }
+                error = ""
+                gpsChoice = null
+            },
+            onDismiss = { gpsChoice = null }
+        )
+    } else AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(if (initial == null) "Add site" else "Edit site") },
         text = {
@@ -300,6 +345,28 @@ fun SiteEditor(
                 Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                OutlinedButton(
+                    onClick = {
+                        val permitted =
+                            ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.ACCESS_FINE_LOCATION
+                            ) == PackageManager.PERMISSION_GRANTED ||
+                            ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.ACCESS_COARSE_LOCATION
+                            ) == PackageManager.PERMISSION_GRANTED
+                        if (permitted) locateNow()
+                        else locationPermission.launch(arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        ))
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (busy) "Finding GPS location…" else "Use Current GPS / Nearby Places")
+                }
+                Text("Use your exact position or select a nearby business or address on the map.",
+                    style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(name, { name = it }, label = { Text("Site name *") }, singleLine = true)
                 OutlinedTextField(address, { newAddress ->
                     if (newAddress != address) { lat = ""; lon = "" }
