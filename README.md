@@ -1,4 +1,4 @@
-# Site Route Planner v0.6 (Android)
+# Site Route Planner v0.7 (Android)
 
 **Native Android APK — in-app waypoint map and driving-road route.**
 
@@ -10,6 +10,14 @@
 - Restoration is replace-all (not merge). Back up your current data before restoring an older file.
 - Backups are manually saved; no automatic sync, cloud account, or scheduled cloud backup exists. The chosen document provider may upload the file depending on where you save it.
 - Existing Android app data can be lost when uninstalling or replacing apps signed with a different debug key. Make a backup using an already installed compatible version before uninstalling. **Version 0.2 does not contain an export feature**, so a failed APK update may require manually re-entering stops into 0.3.
+
+## Tap a house or street address and heading-up navigation (v0.7)
+- In **+ Site → Use Current GPS / Nearby Places**, zoom in on the map and tap a building or road-adjacent point. The app reverse geocodes that tapped position using Android Geocoder and searches nearby OpenStreetMap records tagged with house number/street. Choose a suggested address, business, **Exact tapped map point**, or **Exact GPS position** and then save. A house street address is shown only where the map data or geocoder has it. No house number is invented from coordinates.
+- Nearby business/house results are offered on demand and may not be complete. The source supplies mapped feature centers, which may differ from entrances or driveways. Verify the selected point before driving.
+- While navigating to a site, the map now **follows your GPS and rotates with your driving heading**; GPS travel bearing is preferred while moving and the phone's true-north compass is used when stationary. Tap **Heading up / North up** to switch orientation.
+- **Voice OFF / Voice ON** enables experimental foreground text-to-speech turn alerts from OSRM maneuvers. Prompts are gated by GPS accuracy and proximity to the planned route. It is NOT full car-grade turn-by-turn navigation, cannot account for traffic/off-route rerouting immediately, and does not run in the background. Keep voice off if directions are unreliable and obey actual road signs.
+- The map and directions need internet. Public OSRM and Overpass services are for personal limited experiments, not a production navigation service.
+- Before uninstalling an older APK, use **Backup → Back up all routes to file**. Changing CI debug signing keys still prevents some in-place upgrades; a permanent private signing key remains future work.
 
 ## Add a stop from GPS / nearby business in 0.6
 - Tap **+ Site**, then **Use Current GPS / Nearby Places** in the stop editor. Approve Android location permission and enable phone Location if prompted.
