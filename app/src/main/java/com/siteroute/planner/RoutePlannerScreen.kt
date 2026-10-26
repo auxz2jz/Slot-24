@@ -387,6 +387,21 @@ fun RoutePlannerScreen() {
                 onSiteTap = { navigateTo(it) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
+            if (directToSite) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = {
+                        headingUp = !headingUp
+                        followMe = true
+                    }) { Text(if (headingUp) "Heading up ✓" else "North up") }
+                    TextButton(onClick = { voiceEnabled = !voiceEnabled }) {
+                        Text(if (voiceEnabled) "Voice ON" else "Voice OFF")
+                    }
+                    if (directionDegrees == null) {
+                        Text("Finding heading…", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
             Text(
                 (if (directToSite) "To selected site" else "Full route") +
                     " • ${allSites.size} pins • Blue = road, orange dashes = sequence only",
