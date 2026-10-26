@@ -46,6 +46,18 @@ object NearbyPlaces {
             metersFromGps = 0
         )
 
+    /** Reverse-geocode the exact point the user tapped. */
+    suspend fun atMapTap(context: Context, tapped: GeoPoint): List<NearbyPlace> =
+        withContext(Dispatchers.IO) {
+            reverseGeocode(context, tapped).mapIndexed { index, candidate ->
+                candidate.copy(id = "tap-address-$index")
+            }.filter { it.metersFromGps <= 180 }
+        }
+
+    fun mapTapOption(tapped: GeoPoint): NearbyPlace =
+        gpsOption(tapped).copy(id = "tap-point", name = "Exact tapped map point",
+            category = "Map coordinate")
+
     suspend fun search(context: Context, gps: GeoPoint): NearbySearchResult =
         withContext(Dispatchers.IO) {
             val streetCandidates = reverseGeocode(context, gps)
@@ -95,7 +107,8 @@ object NearbyPlaces {
             nwr(around:450,$lat,$lon)["name"]["tourism"];
             nwr(around:450,$lat,$lon)["name"]["office"];
             nwr(around:450,$lat,$lon)["name"]["leisure"];
-        );out center 200;""".trimIndent()
+            nwr(around:250,$lat,$lon)["addr:housenumber"]["addr:street"];
+        );out center 350;""".trimIndent()
         val url = URL(OVERPASS)
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -137,7 +150,8 @@ object NearbyPlaces {
         return (0 until elements.length()).mapNotNull { index ->
             val element = elements.optJSONObject(index) ?: return@mapNotNull null
             val tags = element.optJSONObject("tags") ?: return@mapNotNull null
-            val name = tags.optString("name").trim()
+            val addr = addressOf(tags)
+            val name = tags.optString("name").trim().ifBlank { addr }
             if (name.isBlank()) return@mapNotNull null
             val center = element.optJSONObject("center")
             val lat = if (element.has("lat")) element.optDouble("lat")
@@ -147,9 +161,9 @@ object NearbyPlaces {
             if (!lat.isFinite() || !lon.isFinite() ||
                 lat !in -90.0..90.0 || lon !in -180.0..180.0) return@mapNotNull null
             val point = GeoPoint(lat, lon)
-            val address = addressOf(tags)
+            val address = addr
             val category = sequenceOf("shop", "amenity", "tourism", "office", "leisure")
-                .map { tags.optString(it) }.firstOrNull { it.isNotBlank() } ?: "Place"
+                .map { tags.optString(it) }.firstOrNull { it.isNotBlank() } ?: "Street address"
             NearbyPlace(
                 id = "osm-${element.optString("type")}-${element.optLong("id")}",
                 name = name,
