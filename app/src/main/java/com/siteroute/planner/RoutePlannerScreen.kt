@@ -311,11 +311,22 @@ fun RoutePlannerScreen() {
         }
     }
 
+    val speech = rememberNavigationSpeech()
+    LaunchedEffect(speech.ready, speech.voices, voiceName, voiceSpeed, voicePitch) {
+        if (speech.ready) {
+            val voice = speech.voices.firstOrNull { it.name == voiceName }
+            if (voice != null) speech.tts.setVoice(voice)
+            else speech.tts.setLanguage(java.util.Locale.getDefault())
+            speech.tts.setSpeechRate(voiceSpeed)
+            speech.tts.setPitch(voicePitch)
+        }
+    }
     SpokenTurnGuidance(
         enabled = voiceEnabled && directToSite && followMe,
         route = roadRoute,
         gps = livePosition,
-        accuracyMeters = gpsAccuracy
+        accuracyMeters = gpsAccuracy,
+        speech = speech
     )
 
     fun finishStop(site: Site, status: String) {
@@ -445,6 +456,9 @@ fun RoutePlannerScreen() {
                     TextButton(onClick = { voiceEnabled = !voiceEnabled }) {
                         Text(if (voiceEnabled) "Voice ON" else "Voice OFF")
                     }
+                    TextButton(onClick = { voiceSettingsOpen = true }) {
+                        Text("Voices")
+                    }
                     if (directionDegrees == null) {
                         Text("Finding heading…", style = MaterialTheme.typography.labelSmall)
                     }
@@ -555,6 +569,28 @@ fun RoutePlannerScreen() {
             }
             Spacer(Modifier.height(5.dp))
         }
+    }
+
+    if (voiceSettingsOpen) {
+        NavigationVoiceSettings(
+            speech = speech,
+            selectedVoice = voiceName,
+            rate = voiceSpeed,
+            pitch = voicePitch,
+            onVoice = { chosen ->
+                voiceName = chosen
+                voicePrefs.edit().putString("voice", chosen).apply()
+            },
+            onRate = { chosen ->
+                voiceSpeed = chosen
+                voicePrefs.edit().putFloat("rate", chosen).apply()
+            },
+            onPitch = { chosen ->
+                voicePitch = chosen
+                voicePrefs.edit().putFloat("pitch", chosen).apply()
+            },
+            onDismiss = { voiceSettingsOpen = false }
+        )
     }
 
     if (backupMessage != null) {
