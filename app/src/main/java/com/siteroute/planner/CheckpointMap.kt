@@ -1,9 +1,10 @@
 package com.siteroute.planner
 
 import android.graphics.Color
-import android.graphics.PointF
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -61,6 +62,7 @@ fun CheckpointMap(
     var mapObject by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
     var lastFrameKey by remember { mutableStateOf("") }
+    var mapSize by remember { mutableStateOf(IntSize.Zero) }
     val newestSites by rememberUpdatedState(sites)
 
     DisposableEffect(view, owner) {
@@ -86,12 +88,12 @@ fun CheckpointMap(
 
     AndroidView(
         factory = { view },
-        modifier = modifier,
+        modifier = modifier.onSizeChanged { mapSize = it },
         update = { mapView ->
             mapView.getMapAsync { map ->
                 if (mapObject !== map) {
                     mapObject = map
-                    map.setOnMapClickListener { clicked ->
+                    map.addOnMapClickListener { clicked ->
                         val projection = map.projection
                         val touch = projection.toScreenLocation(clicked)
                         val limit = 44f * context.resources.displayMetrics.density
@@ -118,7 +120,7 @@ fun CheckpointMap(
 
     // Map updates are driven by *data changes*, not asynchronous getMapAsync callback races.
     LaunchedEffect(styleReady, mapObject, sites, selectedSiteId, currentLocation,
-        roadRoute, routeWaypoints, listId, refocusCount, followMe) {
+        roadRoute, routeWaypoints, listId, refocusCount, followMe, mapSize) {
         val map = mapObject
         val style = map?.style
         if (!styleReady || map == null || style == null) return@LaunchedEffect
