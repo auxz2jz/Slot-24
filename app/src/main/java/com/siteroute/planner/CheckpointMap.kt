@@ -10,6 +10,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -55,6 +56,10 @@ fun CheckpointMap(
     followMe: Boolean,
     refocusCount: Int,
     onSiteTap: (String) -> Unit,
+    onMapTap: ((GeoPoint) -> Unit)? = null,
+    pickerMode: Boolean = false,
+    headingUp: Boolean = false,
+    headingDegrees: Float? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -64,6 +69,7 @@ fun CheckpointMap(
         MapView(context, MapLibreMapOptions().textureMode(true)).apply { onCreate(null) }
     }
     val onClick by rememberUpdatedState(onSiteTap)
+    val onBackgroundTap by rememberUpdatedState(onMapTap)
     var mapObject by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
     var lastFrameKey by remember { mutableStateOf("") }
@@ -101,7 +107,7 @@ fun CheckpointMap(
                     map.addOnMapClickListener { clicked ->
                         val projection = map.projection
                         val touch = projection.toScreenLocation(clicked)
-                        val limit = 44f * context.resources.displayMetrics.density
+                        val limit = (if (pickerMode) 20f else 44f) * context.resources.displayMetrics.density
                         val nearest = newestSites.map { site ->
                             val pixel = projection.toScreenLocation(LatLng(site.latitude, site.longitude))
                             val dx = touch.x - pixel.x
@@ -111,7 +117,10 @@ fun CheckpointMap(
                         if (nearest != null && nearest.second <= limit * limit) {
                             onClick(nearest.first)
                             true
-                        } else false
+                        } else {
+                            onBackgroundTap?.invoke(GeoPoint(clicked.latitude, clicked.longitude))
+                            onBackgroundTap != null
+                        }
                     }
                     map.setStyle(Style.Builder().fromUri(STYLE_URL)) { style ->
                         setupLayers(style)
