@@ -516,7 +516,7 @@ private fun StopMap(
                     map.setStyle(Style.Builder().fromUri(
                         "https://tiles.openfreemap.org/styles/liberty"
                     )) { updatePins(map) }
-                    map.addOnMarkerClickListener { marker ->
+                    map.setOnMarkerClickListener { marker ->
                         marker.snippet?.let(latestOnTap)
                         true
                     }
