@@ -2,11 +2,11 @@ package com.siteroute.planner
 
 import android.content.Context
 import android.location.Geocoder
-import android.location.Location
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.io.ByteArrayOutputStream
 import java.net.URLEncoder
 import java.net.URL
 import java.util.Locale
@@ -114,9 +114,17 @@ object NearbyPlaces {
                 "Nearby lookup HTTP ${connection.responseCode}"
             }
             val data = connection.inputStream.use { input ->
-                val limited = input.readNBytes(MAX_RESPONSE + 1)
-                check(limited.size <= MAX_RESPONSE) { "Nearby search response too large" }
-                String(limited, Charsets.UTF_8)
+                val bytes = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val n = input.read(buffer)
+                    if (n < 0) break
+                    check(bytes.size() + n <= MAX_RESPONSE) {
+                        "Nearby search response too large"
+                    }
+                    bytes.write(buffer, 0, n)
+                }
+                bytes.toString("UTF-8")
             }
             parseOverpass(data, gps)
         } finally {
@@ -164,10 +172,12 @@ object NearbyPlaces {
     }
 
     private fun meters(from: GeoPoint, to: GeoPoint): Int {
-        val results = FloatArray(1)
-        Location.distanceBetween(
-            from.latitude, from.longitude, to.latitude, to.longitude, results
-        )
-        return results[0].roundToInt().coerceAtLeast(0)
+        val r = 6371000.0
+        val dlat = Math.toRadians(to.latitude - from.latitude)
+        val dlon = Math.toRadians(to.longitude - from.longitude)
+        val a = sin(dlat / 2).pow(2) +
+            cos(Math.toRadians(from.latitude)) * cos(Math.toRadians(to.latitude)) *
+            sin(dlon / 2).pow(2)
+        return (2 * r * asin(min(1.0, sqrt(a)))).roundToInt().coerceAtLeast(0)
     }
 }
