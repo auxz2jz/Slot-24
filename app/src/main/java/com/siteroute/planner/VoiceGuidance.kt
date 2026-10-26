@@ -142,7 +142,7 @@ fun NavigationVoiceSettings(
         text = {
             androidx.compose.foundation.layout.Column(
                 verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(
-                    androidx.compose.ui.unit.dp(6)
+                    6.dp
                 )
             ) {
                 androidx.compose.material3.Text(
@@ -155,7 +155,7 @@ fun NavigationVoiceSettings(
                 androidx.compose.foundation.lazy.LazyColumn(
                     modifier = androidx.compose.ui.Modifier
                         .fillMaxWidth()
-                        .heightIn(max = androidx.compose.ui.unit.dp(230))
+                        .heightIn(max = 230.dp)
                 ) {
                     item {
                         androidx.compose.material3.TextButton(
