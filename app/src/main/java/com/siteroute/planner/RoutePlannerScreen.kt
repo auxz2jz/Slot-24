@@ -47,6 +47,8 @@ fun RoutePlannerScreen() {
     var manageStops by remember { mutableStateOf(false) }
     var showTurns by remember { mutableStateOf(false) }
     var followMe by remember { mutableStateOf(false) }
+    var headingUp by remember { mutableStateOf(true) }
+    var voiceEnabled by remember { mutableStateOf(false) }
     var refocusCount by remember { mutableIntStateOf(0) }
     var backupMenu by remember { mutableStateOf(false) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
@@ -148,6 +150,8 @@ fun RoutePlannerScreen() {
     }
 
     var livePosition by remember { mutableStateOf<GeoPoint?>(null) }
+    var gpsCourse by remember { mutableStateOf<Float?>(null) }
+    var gpsAccuracy by remember { mutableStateOf<Float?>(null) }
     var routeOrigin by remember { mutableStateOf<GeoPoint?>(null) }
 
     fun navigateTo(siteId: String) {
@@ -155,7 +159,8 @@ fun RoutePlannerScreen() {
         routeOrigin = livePosition ?: routeOrigin
         selectedId = siteId
         directToSite = true
-        followMe = false
+        followMe = true
+        headingUp = true
         refocusCount++
     }
 
@@ -172,6 +177,12 @@ fun RoutePlannerScreen() {
             override fun onLocationChanged(location: Location) {
                 val fix = GeoPoint(location.latitude, location.longitude)
                 livePosition = fix
+                gpsAccuracy = if (location.hasAccuracy()) location.accuracy else null
+                gpsCourse = if (location.hasSpeed() && location.speed >= 1.5f &&
+                    location.hasBearing() &&
+                    (!location.hasBearingAccuracy() ||
+                        location.bearingAccuracyDegrees <= 45f))
+                    location.bearing else null
                 val last = routeOrigin
                 if (last == null) {
                     routeOrigin = fix
