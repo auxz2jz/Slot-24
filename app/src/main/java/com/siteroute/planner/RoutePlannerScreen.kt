@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -50,6 +51,17 @@ fun RoutePlannerScreen() {
     var headingUp by remember { mutableStateOf(true) }
     var voiceEnabled by remember { mutableStateOf(false) }
     var refocusCount by remember { mutableIntStateOf(0) }
+    var rerouteCount by remember { mutableIntStateOf(0) }
+    var offRouteFixes by remember { mutableIntStateOf(0) }
+    var lastRerouteAt by remember { mutableLongStateOf(0L) }
+    var rerouteStatus by remember { mutableStateOf<String?>(null) }
+    val voicePrefs = remember {
+        context.getSharedPreferences("route_voice_settings", Context.MODE_PRIVATE)
+    }
+    var voiceSettingsOpen by remember { mutableStateOf(false) }
+    var voiceName by remember { mutableStateOf(voicePrefs.getString("voice", "") ?: "") }
+    var voiceSpeed by remember { mutableFloatStateOf(voicePrefs.getFloat("rate", 1.0f)) }
+    var voicePitch by remember { mutableFloatStateOf(voicePrefs.getFloat("pitch", 1.0f)) }
     var backupMenu by remember { mutableStateOf(false) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
     var backupSnapshot by remember { mutableStateOf<String?>(null) }
@@ -155,6 +167,8 @@ fun RoutePlannerScreen() {
     var routeOrigin by remember { mutableStateOf<GeoPoint?>(null) }
 
     fun navigateTo(siteId: String) {
+        offRouteFixes = 0
+        rerouteStatus = null
         // Take the freshest GPS fix at the moment the user taps a destination.
         routeOrigin = livePosition ?: routeOrigin
         selectedId = siteId
@@ -170,6 +184,8 @@ fun RoutePlannerScreen() {
         followMe = false
         refocusCount++
     }
+
+    val isFollowingNavigation by rememberUpdatedState(followMe)
 
     DisposableEffect(hasLocationPermission) {
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -192,8 +208,10 @@ fun RoutePlannerScreen() {
                         last.latitude, last.longitude,
                         fix.latitude, fix.longitude, distance
                     )
-                    // Re-route only after substantial movement; avoid polling the demo service.
-                    if (distance[0] >= 250f) routeOrigin = fix
+                    // The full-route overview refreshes occasionally as before.
+                    // During active turn-by-turn navigation, only a confirmed
+                    // deviation requests a new road route to avoid server flooding.
+                    if (!isFollowingNavigation && distance[0] >= 250f) routeOrigin = fix
                 }
             }
         }
@@ -221,7 +239,7 @@ fun RoutePlannerScreen() {
     }
 
     val compassHeading = rememberCompassHeading(
-        enabled = directToSite && followMe, position = livePosition
+        enabled = followMe, position = livePosition
     )
     val directionDegrees = gpsCourse ?: compassHeading
 
@@ -232,7 +250,39 @@ fun RoutePlannerScreen() {
         routeOrigin, allSites, selectedId, directToSite
     )
 
-    LaunchedEffect(data.activeListId, routeWaypoints) {
+    // Two reliable off-road GPS fixes trigger rerouting immediately, instead of
+    // waiting until we've moved 250 meters. Limit requests to the public demo API.
+    LaunchedEffect(directToSite, selectedId, data.activeListId, followMe) {
+        offRouteFixes = 0
+        rerouteStatus = null
+    }
+    LaunchedEffect(livePosition, gpsAccuracy) {
+        if (!followMe || routeSites.isEmpty() || routing || roadRoute == null) {
+            offRouteFixes = 0
+            return@LaunchedEffect
+        }
+        val off = RouteDeviation.offRoute(roadRoute, livePosition, gpsAccuracy)
+        if (!off) {
+            offRouteFixes = 0
+            if (rerouteStatus == "Checking alternate roads…") rerouteStatus = null
+            return@LaunchedEffect
+        }
+        offRouteFixes++
+        val now = SystemClock.elapsedRealtime()
+        if (offRouteFixes >= RouteDeviation.CONFIRM_FIXES &&
+            now - lastRerouteAt >= RouteDeviation.RETRY_COOLDOWN_MS) {
+            lastRerouteAt = now
+            offRouteFixes = 0
+            val fresh = livePosition ?: return@LaunchedEffect
+            routeOrigin = fresh
+            rerouteCount++
+            rerouteStatus = "Recalculating from your current location…"
+        } else if (offRouteFixes > 0) {
+            rerouteStatus = "Checking alternate roads…"
+        }
+    }
+
+    LaunchedEffect(data.activeListId, routeWaypoints, rerouteCount) {
         roadRoute = null
         routeError = null
         val points = routeWaypoints
@@ -254,8 +304,10 @@ fun RoutePlannerScreen() {
                 routing = true
                 try {
                     roadRoute = withContext(Dispatchers.IO) { RouteService.buildRoute(points) }
+                    rerouteStatus = null
                 } catch (e: Exception) {
                     routeError = "Road directions unavailable. Orange dashed lines show checkpoint order only, NOT drivable roads."
+                    rerouteStatus = null
                 } finally {
                     routing = false
                 }
@@ -263,11 +315,23 @@ fun RoutePlannerScreen() {
         }
     }
 
+    val speech = rememberNavigationSpeech()
+    LaunchedEffect(speech.ready, speech.voices, voiceName, voiceSpeed, voicePitch) {
+        if (speech.ready) {
+            val voice = speech.voices.firstOrNull { it.name == voiceName }
+            if (voice != null) speech.tts.setVoice(voice)
+            else speech.tts.setLanguage(java.util.Locale.getDefault())
+            speech.tts.setSpeechRate(voiceSpeed)
+            speech.tts.setPitch(voicePitch)
+        }
+    }
     SpokenTurnGuidance(
-        enabled = voiceEnabled && directToSite && followMe,
+        enabled = voiceEnabled && followMe &&
+            !RouteDeviation.offRoute(roadRoute, livePosition, gpsAccuracy),
         route = roadRoute,
         gps = livePosition,
-        accuracyMeters = gpsAccuracy
+        accuracyMeters = gpsAccuracy,
+        speech = speech
     )
 
     fun finishStop(site: Site, status: String) {
@@ -359,7 +423,10 @@ fun RoutePlannerScreen() {
                     Text("Full route")
                 }
                 if (hasLocationPermission) {
-                    TextButton(onClick = { followMe = !followMe }) {
+                    TextButton(onClick = {
+                        followMe = !followMe
+                        if (followMe) headingUp = true
+                    }) {
                         Text(if (followMe) "Following" else "Follow GPS")
                     }
                 } else {
@@ -381,13 +448,13 @@ fun RoutePlannerScreen() {
                 routeWaypoints = routeWaypoints,
                 listId = data.activeListId,
                 followMe = followMe,
-                headingUp = headingUp && directToSite,
+                headingUp = headingUp && followMe,
                 headingDegrees = directionDegrees,
                 refocusCount = refocusCount,
                 onSiteTap = { navigateTo(it) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
-            if (directToSite) {
+            if (directToSite || followMe) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = {
@@ -396,6 +463,9 @@ fun RoutePlannerScreen() {
                     }) { Text(if (headingUp) "Heading up ✓" else "North up") }
                     TextButton(onClick = { voiceEnabled = !voiceEnabled }) {
                         Text(if (voiceEnabled) "Voice ON" else "Voice OFF")
+                    }
+                    TextButton(onClick = { voiceSettingsOpen = true }) {
+                        Text("Voices")
                     }
                     if (directionDegrees == null) {
                         Text("Finding heading…", style = MaterialTheme.typography.labelSmall)
@@ -407,6 +477,9 @@ fun RoutePlannerScreen() {
                     " • ${allSites.size} pins • Blue = road, orange dashes = sequence only",
                 style = MaterialTheme.typography.labelSmall
             )
+            if (directToSite && rerouteStatus != null) {
+                Text(rerouteStatus.orEmpty(), style = MaterialTheme.typography.bodySmall)
+            }
             if (routing) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             } else if (roadRoute != null) {
@@ -504,6 +577,28 @@ fun RoutePlannerScreen() {
             }
             Spacer(Modifier.height(5.dp))
         }
+    }
+
+    if (voiceSettingsOpen) {
+        NavigationVoiceSettings(
+            speech = speech,
+            selectedVoice = voiceName,
+            rate = voiceSpeed,
+            pitch = voicePitch,
+            onVoice = { chosen ->
+                voiceName = chosen
+                voicePrefs.edit().putString("voice", chosen).apply()
+            },
+            onRate = { chosen ->
+                voiceSpeed = chosen
+                voicePrefs.edit().putFloat("rate", chosen).apply()
+            },
+            onPitch = { chosen ->
+                voicePitch = chosen
+                voicePrefs.edit().putFloat("pitch", chosen).apply()
+            },
+            onDismiss = { voiceSettingsOpen = false }
+        )
     }
 
     if (backupMessage != null) {
