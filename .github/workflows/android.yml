@@ -33,16 +33,16 @@ jobs:
           name: site-route-planner-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
-      - name: Publish version 0.5 debug APK to GitHub Releases
+      - name: Publish version 0.6 debug APK to GitHub Releases
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          APK="app/build/outputs/apk/debug/app-debug.apk#SiteRoutePlanner-v0.5.apk"
-          if gh release view v0.5.0 >/dev/null 2>&1; then
-            gh release upload v0.5.0 "$APK" --clobber
+          APK="app/build/outputs/apk/debug/app-debug.apk#SiteRoutePlanner-v0.6.apk"
+          if gh release view v0.6.0 >/dev/null 2>&1; then
+            gh release upload v0.6.0 "$APK" --clobber
           else
-            gh release create v0.5.0 "$APK" --target "$GITHUB_SHA" \
-              --title "Site Route Planner v0.5" \
-              --notes "Debug APK for personal testing. Moves saved sites into vertical list below the map, supports selecting a single site for current GPS-to-site routing, separate full ordered checkpoint route, Up/Down reordering. Backup/restore and map rendering fixes remain. Android 8+. APK debug signing may differ from previous builds; do not uninstall an older app containing important stops without a backup."
+            gh release create v0.6.0 "$APK" --target "$GITHUB_SHA" \
+              --title "Site Route Planner v0.6" \
+              --notes "Debug APK for personal testing. Adds Use Current GPS/Nearby Places while adding or editing sites, a selectable nearby OpenStreetMap business/address map, and exact GPS coordinates. Keeps backup, ordered route and in-app navigation. Backup/restore and map rendering fixes remain. Android 8+. APK debug signing may differ from previous builds; do not uninstall an older app containing important stops without a backup."
           fi
