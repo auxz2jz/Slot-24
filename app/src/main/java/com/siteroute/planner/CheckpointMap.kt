@@ -134,7 +134,8 @@ fun CheckpointMap(
 
     // Map updates are driven by *data changes*, not asynchronous getMapAsync callback races.
     LaunchedEffect(styleReady, mapObject, sites, selectedSiteId, focusedSiteId, currentLocation,
-        roadRoute, routeWaypoints, listId, refocusCount, followMe, mapSize) {
+        roadRoute, routeWaypoints, listId, refocusCount, followMe, mapSize,
+        pickerMode, headingUp, headingDegrees) {
         val map = mapObject
         val style = map?.style
         if (!styleReady || map == null || style == null) return@LaunchedEffect
@@ -147,6 +148,11 @@ fun CheckpointMap(
             sites.joinToString { "${it.id}:${it.latitude}:${it.longitude}" }
         val gps = currentLocation
         val cameraKey = when {
+            pickerMode -> "picker/$listId/$refocusCount"
+            followMe && gps != null -> {
+                val angle = if (headingUp) ((headingDegrees ?: 0f) / 5f).toInt() else 0
+                "drive/${String.format(java.util.Locale.US, "%.5f,%.5f", gps.latitude, gps.longitude)}/$angle/$headingUp"
+            }
             focusedSiteId != null -> {
                 // Also recenter when the first GPS fix or recalculated road geometry arrives.
                 val roadKey = roadRoute?.geometry?.let {
@@ -162,7 +168,21 @@ fun CheckpointMap(
             // Save only after camera successfully applies; view dimensions must exist.
             view.post {
                 if (view.width <= 0 || view.height <= 0 || map.style == null) return@post
-                if (focusedSiteId != null) {
+                if (pickerMode && gps != null) {
+                    map.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                        LatLng(gps.latitude, gps.longitude), 18.5
+                    ))
+                } else if (followMe && gps != null) {
+                    val bearing = if (headingUp) (headingDegrees ?: 0f).toDouble() else 0.0
+                    map.animateCamera(CameraUpdateFactory.newCameraPosition(
+                        CameraPosition.Builder()
+                            .target(LatLng(gps.latitude, gps.longitude))
+                            .zoom(16.6)
+                            .bearing(bearing)
+                            .tilt(if (headingUp) 35.0 else 0.0)
+                            .build()
+                    ), 400)
+                } else if (focusedSiteId != null) {
                     val destination = sites.firstOrNull { it.id == focusedSiteId }
                     if (destination != null) {
                         // Tap a site: frame just the phone and the chosen destination,
@@ -187,10 +207,6 @@ fun CheckpointMap(
                             map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(), 66))
                         }
                     }
-                } else if (followMe && gps != null) {
-                    map.animateCamera(
-                        CameraUpdateFactory.newLatLngZoom(LatLng(gps.latitude, gps.longitude), 15.5)
-                    )
                 } else if (sites.isNotEmpty()) {
                     val points = sites.map { LatLng(it.latitude, it.longitude) }
                     val first = points.first()
