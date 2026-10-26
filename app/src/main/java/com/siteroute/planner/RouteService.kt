@@ -13,11 +13,18 @@ data class RoadLeg(
     val instructions: List<String>
 )
 
+data class RouteManeuver(
+    val location: GeoPoint,
+    val instruction: String,
+    val kind: String
+)
+
 data class RoadRoute(
     val geometry: List<GeoPoint>,
     val legs: List<RoadLeg>,
     val distanceMeters: Double,
-    val durationSeconds: Double
+    val durationSeconds: Double,
+    val maneuvers: List<RouteManeuver> = emptyList()
 )
 
 /**
@@ -62,6 +69,7 @@ object RouteService {
         }
         require(geometry.size >= 2) { "Road routing returned no usable path" }
         val legsArray = route.getJSONArray("legs")
+        val maneuverList = mutableListOf<RouteManeuver>()
         val legs = (0 until legsArray.length()).map { i ->
             val leg = legsArray.getJSONObject(i)
             val steps = leg.optJSONArray("steps")
