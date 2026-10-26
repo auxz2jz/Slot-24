@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         MapLibre.getInstance(applicationContext)
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme()) { PlannerScreen() }
+            MaterialTheme(colorScheme = lightColorScheme()) { RoutePlannerScreen() }
         }
     }
 }
@@ -257,7 +257,7 @@ fun PlannerScreen() {
 }
 
 @Composable
-private fun TextEntryDialog(
+fun TextEntryDialog(
     title: String, label: String, onDismiss: () -> Unit, onSave: (String) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
@@ -275,7 +275,7 @@ private fun TextEntryDialog(
 }
 
 @Composable
-private fun SiteEditor(
+fun SiteEditor(
     initial: Site?,
     onDismiss: () -> Unit,
     onSave: (Site) -> Unit
@@ -409,7 +409,7 @@ private fun SiteSummary(
 }
 
 @Composable
-private fun SiteRow(
+fun SiteRow(
     site: Site,
     onDirections: () -> Unit,
     onComplete: () -> Unit,

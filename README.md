@@ -1,53 +1,38 @@
-# Site Route Planner (Android)
+# Site Route Planner v0.2 (Android)
 
-**Repository:** Slot-24 | **Status:** source-code MVP (not yet build-verified)
+**Native Android APK — in-app waypoint map and driving-road route.**
 
-A native Android application to organize stops you need to visit, see their locations on a map, follow them one at a time, change lists during the day, and enter appointment/time windows for individual stops.
+## One-map workflow
+- Start on a single MapLibre map, with no Google Maps redirect.
+- Add checkpoints by street address or coordinates. Pins remain visible together.
+- Organize locations into several lists and switch lists without losing progress.
+- See one road-following route connecting your current GPS position and your remaining checkpoints **in the order you choose**.
+- Tap any pending checkpoint on the map to make it your next destination (followed by the other remaining checkpoints).
+- **Done → Next** marks it visited and redraws the route to the next pending stop. **Skip → Next** marks it skipped and moves on.
+- **Stops** opens a management overlay where you can move, edit, restore, delete and reset stops. The main view remains the map.
+- Show earliest/latest scheduled arrival windows, notes, and missed-time warnings.
+- **Fit route** zooms out to show the pending sites. **Follow GPS** follows your current location.
+- **Directions** shows textual road directions for the first leg, on the same screen.
 
-## What the first version does
+## How GPS and routing work
+- The app requests only foreground fine/coarse location permission and shows a location marker while open.
+- Android location updates are used while the app screen is active. A route is recalculated after a roughly 250-meter change in routing origin, when changing next checkpoint, or when editing the list.
+- Routes come from the public OSRM **demo** routing service, which is **only appropriate for experimentation or limited personal testing**, subject to availability and usage restrictions. It sends waypoint and current-location coordinates to the routing server. Do not use for heavy usage, production navigation or safety-critical driving. Obtain a dedicated routing backend before broader deployment.
+- Estimated route times do not include traffic or time spent at checkpoints.
+- With location permission off or no GPS fix, road routing starts at the first pending checkpoint when multiple checkpoints exist. The app will never draw a fake straight line and call it a driving route.
+- This version does **not** provide spoken turn-by-turn directions, automatic arrival detection, background navigation, or offline road routing.
+- Map tiles require internet (OpenFreeMap). Saved lists and checkpoint progress remain on device.
 
-- **Lists:** Create multiple named routes such as "Morning", "Afternoon", "Urgent".
-- **Sites:** Add names, street addresses (geocoded on the phone), or exact latitude/longitude; add notes.
-- **Map:** Show locations as tappable pins on a MapLibre/OpenFreeMap map.
-- **Visit order:** Set your route sequence using up/down controls.
-- **Directions:** Tap **Start / Next** for the first pending site. **Done → Next** marks the current site complete and opens the next pending destination in Google Maps. **Skip** skips a site and moves ahead. On return, switch lists and keep each list's status independently.
-- **Time windows:** Specify earliest and/or latest allowed arrival, 24-hour format HH:mm. Both equal for a fixed target time. Sites past their latest time show a warning.
-- **Persistence:** Lists and statuses are stored privately on the device using SharedPreferences; no login or remote database.
+## Build
+GitHub Actions workflow `.github/workflows/android.yml` runs Android unit tests, builds the debug APK and publishes a downloadable `site-route-planner-debug-apk` artifact after a successful run.
 
-## Technology
+For local build: install Android Studio, Android SDK 36, JDK 17 and Gradle 8.13 or use the GitHub workflow. App supports Android 8+.
 
-- Kotlin + Jetpack Compose / Material 3
-- MapLibre Native 13.7.1 for the pin map; OpenFreeMap Liberty style (no API key)
-- Google Maps Directions URL intent for driving directions (no Google Maps Platform API key)
-- Android Geocoder for address-to-coordinate lookup
-- Local JSON persistence in SharedPreferences
+## Tech and attribution
+- Kotlin, Jetpack Compose, Android LocationManager
+- MapLibre 13.7.1 with online OpenFreeMap Liberty map style (OpenStreetMap contributors)
+- Road routing and geometry: Project OSRM demo server (OpenStreetMap contributors)
+- Android Geocoder for address lookup
+- JSON persisted locally using SharedPreferences; no user account, no app analytics.
 
-## Build / run
-
-1. Open this GitHub repository in Android Studio.
-2. Install Android SDK 36 and JDK 17. In Android Studio, open the root folder and allow the Gradle sync.
-3. Select the `app` configuration and run on an Android 8.0+ (API 26+) device or emulator with internet access.
-4. Grant location access to Google Maps itself if prompted when launching driving directions. This app does not request location permission.
-5. Add a list, add a site, enter address or coordinates, and navigate.
-
-The repository also has a GitHub Actions workflow at `.github/workflows/android.yml` that attempts a debug APK build and unit tests on pushes to `main`. If the workflow succeeds, the APK is available as a short-lived Actions artifact; this has not yet been verified here.
-
-**Important:** A Gradle wrapper (`gradlew`, wrapper JAR, and properties) and APK are not included yet. Android Studio can open the Gradle project; generate a wrapper with an installed Gradle if required. The source has not been compiled or device-tested here.
-
-## Navigation behavior
-
-Manual stop order is authoritative in the MVP. This app does **not** yet calculate driving ETAs, optimize stop sequence, automatically replan around deadlines, or detect that you have arrived. The time labels/warnings help you decide when to change lists. You manually tap **Done → Next** or **Skip**. See [Roadmap](docs/ROADMAP.md).
-
-## Map attribution / third-party services
-
-- MapLibre SDK: https://maplibre.org
-- Map styles/tiles: https://openfreemap.org/ (follow its attribution/usage terms)
-- Map data © OpenStreetMap contributors
-- Driving directions open externally: https://developers.google.com/maps/documentation/urls/get-started
-- Geocoding uses the device's Android Geocoder implementation, whose availability and accuracy vary.
-
-## Privacy
-
-Lists, site locations, and notes are stored on this device by default. Viewing a map sends tile requests to the tile provider; geocoding may use a device geocoder service; requesting driving directions sends destination coordinates to the external maps handler. Do not enter sensitive addresses into a publicly shared demo/screenshots.
-
-This is a development prototype, not a safety-critical navigation system.
+Road paths may be wrong or outdated. Always obey road signs and traffic law. Do not interact with the app while driving.
