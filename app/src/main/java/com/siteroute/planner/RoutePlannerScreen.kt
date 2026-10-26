@@ -185,6 +185,8 @@ fun RoutePlannerScreen() {
         refocusCount++
     }
 
+    val isDirectNavigation by rememberUpdatedState(directToSite)
+
     DisposableEffect(hasLocationPermission) {
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val listener = object : LocationListener {
@@ -206,8 +208,10 @@ fun RoutePlannerScreen() {
                         last.latitude, last.longitude,
                         fix.latitude, fix.longitude, distance
                     )
-                    // Re-route only after substantial movement; avoid polling the demo service.
-                    if (distance[0] >= 250f) routeOrigin = fix
+                    // The full-route overview refreshes occasionally as before.
+                    // During active turn-by-turn navigation, only a confirmed
+                    // deviation requests a new road route to avoid server flooding.
+                    if (!isDirectNavigation && distance[0] >= 250f) routeOrigin = fix
                 }
             }
         }
