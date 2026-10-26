@@ -1,4 +1,4 @@
-# Site Route Planner v0.8 (Android)
+# Site Route Planner v0.9 (Android)
 
 **Native Android APK — in-app waypoint map and driving-road route.**
 
@@ -10,6 +10,13 @@
 - Restoration is replace-all (not merge). Back up your current data before restoring an older file.
 - Backups are manually saved; no automatic sync, cloud account, or scheduled cloud backup exists. The chosen document provider may upload the file depending on where you save it.
 - Existing Android app data can be lost when uninstalling or replacing apps signed with a different debug key. Make a backup using an already installed compatible version before uninstalling. **Version 0.2 does not contain an export feature**, so a failed APK update may require manually re-entering stops into 0.3.
+
+## Preserve live navigation when rotating the phone (v0.9)
+- The Android Activity now handles portrait ↔ landscape configuration changes without restarting or rebuilding the navigation session. Your live MapLibre map, current blue route, destination, GPS-following status, orientation and voice options remain active.
+- The active destination ID, single-stop/full-route mode, follow/heading and voice switches, and last routing-origin coordinates are additionally stored using Compose **rememberSaveable**. If Android must recreate the Activity for another reason, it restores those selections and recalculates the road route using the saved origin or the next GPS fix.
+- Landscape mode prioritizes a large, usable map, with a compact bottom navigation bar for the destination, completion, heading and voices. Portrait mode continues to show the complete vertical list beneath the map. You can manage checkpoints from the **Stops** button in either orientation.
+- Verify on phone: choose **Test** (or another route), tap a site, enable Follow GPS and optionally Voice, then rotate portrait → landscape → portrait. The selected destination and route should remain; no manual re-selection or restart should be needed. Repeat during a full multi-stop route, after moving the position marker and when rerouting.
+- Save route backups as usual before uninstalling a debug APK. The persistent release-signing issue is separate from this display-rotation fix. This has been CI compiled and unit-tested but not tested on physical Android hardware.
 
 ## Auto-reroute and voice choices (v0.8)
 - While **Follow GPS** is active on either a single stop or a full multi-checkpoint itinerary, the app checks fresh GPS positions against the **full blue road polyline**, measuring distance to each road segment. If **two consecutive GPS fixes** (normally around 3–6 seconds) with accuracy of 35 m or better lie over **45 m away from the route**, the app recalculates a new road route from your current position to the **same selected stop**, or through the **same remaining checkpoints in saved order** for a full route. GPS error can delay or falsely trigger rerouting; the app never assumes a safe or legal maneuver.
