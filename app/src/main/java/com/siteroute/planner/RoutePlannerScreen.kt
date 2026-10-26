@@ -309,7 +309,7 @@ fun RoutePlannerScreen() {
                         data.lists.forEach { list ->
                             DropdownMenuItem(text = { Text(list.name) }, onClick = {
                                 update(data.copy(activeListId = list.id))
-                                selectedId = null
+                                showFullRoute()
                                 listMenu = false
                                 refocusCount++
                             })
@@ -330,10 +330,9 @@ fun RoutePlannerScreen() {
                 OutlinedButton(onClick = { manageStops = true }) {
                     Text("Stops (${allSites.size})")
                 }
-                OutlinedButton(onClick = {
-                    followMe = false
-                    refocusCount++
-                }) { Text("Fit route") }
+                OutlinedButton(onClick = { showFullRoute() }) {
+                    Text("Full route")
+                }
                 if (hasLocationPermission) {
                     TextButton(onClick = { followMe = !followMe }) {
                         Text(if (followMe) "Following" else "Follow GPS")
@@ -348,108 +347,117 @@ fun RoutePlannerScreen() {
                 }
             }
 
-            if (allSites.isNotEmpty()) {
-                // Show the entire selected list in order, including visited/skipped stops.
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    allSites.forEachIndexed { index, stop ->
-                        AssistChip(
-                            onClick = { if (stop.status == "pending") selectedId = stop.id },
-                            label = {
-                                Text("${index + 1}. ${stop.name}" +
-                                    if (stop.status == "visited") " ✓" else
-                                    if (stop.status == "skipped") " –" else "")
-                            }
-                        )
-                    }
-                }
-            }
             CheckpointMap(
                 sites = allSites,
                 selectedSiteId = nextSite?.id,
+                focusedSiteId = if (directToSite) nextSite?.id else null,
                 currentLocation = livePosition,
                 roadRoute = roadRoute,
                 routeWaypoints = routeWaypoints,
                 listId = data.activeListId,
                 followMe = followMe,
                 refocusCount = refocusCount,
-                onSiteTap = { selectedId = it },
+                onSiteTap = { navigateTo(it) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
             Text(
-                "Pins: ${allSites.size} • Route: ${currentList?.name ?: "None"} • Blue = roads, dashed orange = order only",
+                (if (directToSite) "To selected site" else "Full route") +
+                    " • ${allSites.size} pins • Blue = road, orange dashes = sequence only",
                 style = MaterialTheme.typography.labelSmall
             )
             if (routing) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
-                Text("Drawing road route…", style = MaterialTheme.typography.bodySmall)
             } else if (roadRoute != null) {
-                val route = roadRoute!!
                 Text(
-                    "Road route: ${RouteService.miles(route.distanceMeters)} • " +
-                        RouteService.minutes(route.durationSeconds) +
-                        " estimated, excluding time at stops",
+                    (if (directToSite) "Fastest estimated drive (no live traffic): " else "All pending stops: ") +
+                        RouteService.miles(roadRoute!!.distanceMeters) + " • " +
+                        RouteService.minutes(roadRoute!!.durationSeconds),
                     style = MaterialTheme.typography.bodySmall
                 )
             } else {
-                val errorText = routeError
-                if (errorText != null) {
-                    Text(errorText, style = MaterialTheme.typography.bodySmall,
+                routeError?.let { error ->
+                    Text(error, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error)
                 }
             }
             Spacer(Modifier.height(4.dp))
-            if (nextSite == null) {
-                Text(
-                    if (allSites.isEmpty()) "Tap + Site to add your first checkpoint."
-                    else "No pending checkpoints. Use Stops to restore or reset a visit.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(vertical = 12.dp)
-                )
+            // The list belongs BELOW the map, never in a horizontal strip above it.
+            Text(
+                "Sites in order • Tap a site for GPS directions • ↑ ↓ reorder",
+                style = MaterialTheme.typography.labelMedium
+            )
+            if (allSites.isEmpty()) {
+                Text("No sites in this list. Tap + Site to add one.",
+                    style = MaterialTheme.typography.bodySmall)
             } else {
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Column(
-                        Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Text("NEXT CHECKPOINT: ${nextSite.name}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold)
-                        Text(RouteLogic.timeDescription(nextSite),
-                            style = MaterialTheme.typography.bodySmall)
-                        RouteLogic.timeWarning(nextSite)?.let {
-                            Text(it, color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (nextSite.notes.isNotBlank()) {
-                            Text(nextSite.notes, style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (routeOrigin != null && roadRoute?.legs?.isNotEmpty() == true) {
-                            val leg = roadRoute!!.legs.first()
-                            Text(
-                                "From your position: ${RouteService.miles(leg.distanceMeters)} • " +
-                                    RouteService.minutes(leg.durationSeconds),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        } else if (routeOrigin == null) {
-                            Text("Waiting for a GPS position; remaining checkpoints stay on the map.",
-                                style = MaterialTheme.typography.bodySmall)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Button(onClick = { finishStop(nextSite, "visited") }) {
-                                Text("Done → Next")
+                LazyColumn(
+                    Modifier.fillMaxWidth().heightIn(max = 205.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    itemsIndexed(allSites, key = { _, site -> site.id }) { index, site ->
+                        val active = directToSite && selectedId == site.id
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            if (active) {
+                                Button(
+                                    onClick = { navigateTo(site.id) },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Text("${index + 1}. ${site.name}", maxLines = 2)
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { navigateTo(site.id) },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Text("${index + 1}. ${site.name}" +
+                                        (if (site.status == "visited") " ✓" else
+                                        if (site.status == "skipped") " (skipped)" else ""),
+                                        maxLines = 2)
+                                }
                             }
-                            OutlinedButton(onClick = { finishStop(nextSite, "skipped") }) {
-                                Text("Skip → Next")
-                            }
-                            TextButton(
-                                enabled = roadRoute?.legs?.firstOrNull()?.instructions?.isNotEmpty() == true,
-                                onClick = { showTurns = true }
-                            ) { Text("Directions") }
+                            IconButton(
+                                enabled = index > 0,
+                                onClick = {
+                                    update(RouteLogic.moved(data, site.id, -1))
+                                    if (!directToSite) refocusCount++
+                                }
+                            ) { Text("↑") }
+                            IconButton(
+                                enabled = index < allSites.lastIndex,
+                                onClick = {
+                                    update(RouteLogic.moved(data, site.id, 1))
+                                    if (!directToSite) refocusCount++
+                                }
+                            ) { Text("↓") }
                         }
                     }
+                }
+            }
+            if (nextSite != null) {
+                Text(
+                    (if (directToSite) "Destination: " else "Next checkpoint: ") +
+                        nextSite.name + " • " + RouteLogic.timeDescription(nextSite),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(onClick = { finishStop(nextSite, "visited") }) {
+                        Text("Done → Next")
+                    }
+                    OutlinedButton(onClick = { finishStop(nextSite, "skipped") }) {
+                        Text("Skip → Next")
+                    }
+                    TextButton(
+                        enabled = roadRoute?.legs?.firstOrNull()?.instructions?.isNotEmpty() == true,
+                        onClick = { showTurns = true }
+                    ) { Text("Turns") }
                 }
             }
             Spacer(Modifier.height(5.dp))
@@ -479,9 +487,7 @@ fun RoutePlannerScreen() {
             confirmButton = {
                 TextButton(onClick = {
                     update(candidate)
-                    selectedId = null
-                    followMe = false
-                    refocusCount++
+                    showFullRoute()
                     restoreCandidate = null
                     backupMessage = "Backup restored: ${candidate.lists.size} routes, " +
                         "${candidate.sites.size} stops."
@@ -525,7 +531,7 @@ fun RoutePlannerScreen() {
                             SiteRow(
                                 site = site,
                                 onDirections = {
-                                    selectedId = site.id
+                                    navigateTo(site.id)
                                     manageStops = false
                                 },
                                 onComplete = { finishStop(site, "visited") },
@@ -570,7 +576,7 @@ fun RoutePlannerScreen() {
             onSave = { name ->
                 val list = VisitList(name = name)
                 update(data.copy(lists = data.lists + list, activeListId = list.id))
-                selectedId = null
+                showFullRoute()
                 addList = false
             }
         )
@@ -591,7 +597,7 @@ fun RoutePlannerScreen() {
                             activeListId = rest.first().id
                         ))
                     }
-                    selectedId = null
+                    showFullRoute()
                     deleteList = false
                 }) { Text("Delete") }
             },
@@ -617,7 +623,7 @@ fun RoutePlannerScreen() {
                         if (it.id == previous.id) site else it
                     }))
                 }
-                selectedId = site.id
+                navigateTo(site.id)
                 addSite = false
                 editSite = null
             }
