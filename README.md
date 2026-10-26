@@ -1,4 +1,4 @@
-# Site Route Planner v0.5 (Android)
+# Site Route Planner v0.6 (Android)
 
 **Native Android APK — in-app waypoint map and driving-road route.**
 
@@ -10,6 +10,15 @@
 - Restoration is replace-all (not merge). Back up your current data before restoring an older file.
 - Backups are manually saved; no automatic sync, cloud account, or scheduled cloud backup exists. The chosen document provider may upload the file depending on where you save it.
 - Existing Android app data can be lost when uninstalling or replacing apps signed with a different debug key. Make a backup using an already installed compatible version before uninstalling. **Version 0.2 does not contain an export feature**, so a failed APK update may require manually re-entering stops into 0.3.
+
+## Add a stop from GPS / nearby business in 0.6
+- Tap **+ Site**, then **Use Current GPS / Nearby Places** in the stop editor. Approve Android location permission and enable phone Location if prompted.
+- The app obtains a reasonably fresh current location and opens a nearby-selection **map**. Your exact GPS point is always selectable.
+- Nearby named businesses such as supermarkets, restaurants and other OpenStreetMap places may appear with distances. Street-address suggestions come from the Android Geocoder. Tap a suggestion in the list, or a numbered pin then **Use selected**.
+- A chosen business uses the mapped place's coordinates, which may differ from the exact phone location. The site name/address and coordinates are filled into the normal editor. Review and tap **Save** to create your stop.
+- OpenStreetMap community data is incomplete, so a nearby Walmart or street address cannot be guaranteed. Exact GPS coordinates work even if both external services fail.
+- Nearby lookup happens **only when the user explicitly taps the GPS button**; searching sends the phone coordinates to a public Overpass map-data server (https://overpass-api.de) and loads OpenFreeMap tiles. The service may be slow, rate limited, or unavailable; do not rely on this public service for production-scale use.
+- Stops, routes and backups remain stored locally on your phone (unless you explicitly export a backup to a cloud document provider).
 
 ## One-screen driving layout in 0.5
 - Select any saved list from the dropdown (e.g. **My Stops** or **Test**); the map shows every stop as a numbered pin.
