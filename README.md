@@ -1,12 +1,24 @@
-# Site Route Planner v0.2 (Android)
+# Site Route Planner v0.3 (Android)
 
 **Native Android APK — in-app waypoint map and driving-road route.**
+
+## Back up and restore (Android file picker)
+- Tap **Backup** (top-right) then **Back up all routes to file**.
+- Choose a folder or document provider and save the suggested `site-routes-YYYY-MM-DD_HH-mm.json` file.
+- The JSON file includes every list and checkpoint, GPS coordinates, addresses, visit windows, notes, manual stop order, visited/skipped status, and the active list.
+- Tap **Backup → Restore routes from file** and select a prior `.json` backup. The app checks the format and content, shows route/stop counts, and asks permission before **replacing** local data.
+- Restoration is replace-all (not merge). Back up your current data before restoring an older file.
+- Backups are manually saved; no automatic sync, cloud account, or scheduled cloud backup exists. The chosen document provider may upload the file depending on where you save it.
+- Existing Android app data can be lost when uninstalling or replacing apps signed with a different debug key. Make a backup using an already installed compatible version before uninstalling. **Version 0.2 does not contain an export feature**, so a failed APK update may require manually re-entering stops into 0.3.
 
 ## One-map workflow
 - Start on a single MapLibre map, with no Google Maps redirect.
 - Add checkpoints by street address or coordinates. Pins remain visible together.
 - Organize locations into several lists and switch lists without losing progress.
-- See one road-following route connecting your current GPS position and your remaining checkpoints **in the order you choose**.
+- See **all** stops from the selected list on one map, including visited and skipped stops, with numbered colored pins in the saved order.
+- Use the labeled stop strip above the map for order and selection. **Fit route** now includes all locations in the selected list.
+- The blue road route connects your position and the remaining pending checkpoints in saved order, automatically updating after completing or skipping each stop.
+- Selecting a different pending checkpoint starts from that checkpoint and then continues through the rest in the saved order, wrapping to earlier pending checkpoints if needed.
 - Tap any pending checkpoint on the map to make it your next destination (followed by the other remaining checkpoints).
 - **Done → Next** marks it visited and redraws the route to the next pending stop. **Skip → Next** marks it skipped and moves on.
 - **Stops** opens a management overlay where you can move, edit, restore, delete and reset stops. The main view remains the map.
