@@ -75,7 +75,16 @@ object RouteService {
             val steps = leg.optJSONArray("steps")
             val instructions = if (steps == null) emptyList() else {
                 (0 until steps.length()).map { n ->
-                    formatStep(steps.getJSONObject(n))
+                    val step = steps.getJSONObject(n)
+                    val maneuver = step.getJSONObject("maneuver")
+                    val location = maneuver.optJSONArray("location")
+                    if (location != null && location.length() >= 2) {
+                        maneuverList += RouteManeuver(
+                            GeoPoint(location.getDouble(1), location.getDouble(0)),
+                            formatStep(step), maneuver.optString("type")
+                        )
+                    }
+                    formatStep(step)
                 }.filter { it.isNotBlank() }
             }
             RoadLeg(
@@ -88,7 +97,8 @@ object RouteService {
             geometry = geometry,
             legs = legs,
             distanceMeters = route.getDouble("distance"),
-            durationSeconds = route.getDouble("duration")
+            durationSeconds = route.getDouble("duration"),
+            maneuvers = maneuverList
         )
     }
 
