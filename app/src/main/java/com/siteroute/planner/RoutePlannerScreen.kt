@@ -322,7 +322,8 @@ fun RoutePlannerScreen() {
         }
     }
     SpokenTurnGuidance(
-        enabled = voiceEnabled && directToSite && followMe,
+        enabled = voiceEnabled && directToSite && followMe &&
+            !RouteDeviation.offRoute(roadRoute, livePosition, gpsAccuracy),
         route = roadRoute,
         gps = livePosition,
         accuracyMeters = gpsAccuracy,
