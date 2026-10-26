@@ -1,6 +1,7 @@
 package com.siteroute.planner
 
 import android.Manifest
+import android.content.res.Configuration
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
@@ -15,9 +16,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -36,22 +39,24 @@ import kotlinx.coroutines.withContext
 @Composable
 fun RoutePlannerScreen() {
     val context = LocalContext.current
+    val isLandscape = LocalConfiguration.current.orientation ==
+        Configuration.ORIENTATION_LANDSCAPE
     val store = remember { SiteStore(context.applicationContext) }
     var data by remember { mutableStateOf(store.load()) }
-    var selectedId by remember { mutableStateOf<String?>(null) }
-    var directToSite by remember { mutableStateOf(false) }
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var directToSite by rememberSaveable { mutableStateOf(false) }
     var listMenu by remember { mutableStateOf(false) }
     var addList by remember { mutableStateOf(false) }
     var deleteList by remember { mutableStateOf(false) }
     var addSite by remember { mutableStateOf(false) }
     var editSite by remember { mutableStateOf<Site?>(null) }
     var manageStops by remember { mutableStateOf(false) }
-    var showTurns by remember { mutableStateOf(false) }
-    var followMe by remember { mutableStateOf(false) }
-    var headingUp by remember { mutableStateOf(true) }
-    var voiceEnabled by remember { mutableStateOf(false) }
-    var refocusCount by remember { mutableIntStateOf(0) }
-    var rerouteCount by remember { mutableIntStateOf(0) }
+    var showTurns by rememberSaveable { mutableStateOf(false) }
+    var followMe by rememberSaveable { mutableStateOf(false) }
+    var headingUp by rememberSaveable { mutableStateOf(true) }
+    var voiceEnabled by rememberSaveable { mutableStateOf(false) }
+    var refocusCount by rememberSaveable { mutableIntStateOf(0) }
+    var rerouteCount by rememberSaveable { mutableIntStateOf(0) }
     var offRouteFixes by remember { mutableIntStateOf(0) }
     var lastRerouteAt by remember { mutableLongStateOf(0L) }
     var rerouteStatus by remember { mutableStateOf<String?>(null) }
@@ -164,13 +169,25 @@ fun RoutePlannerScreen() {
     var livePosition by remember { mutableStateOf<GeoPoint?>(null) }
     var gpsCourse by remember { mutableStateOf<Float?>(null) }
     var gpsAccuracy by remember { mutableStateOf<Float?>(null) }
-    var routeOrigin by remember { mutableStateOf<GeoPoint?>(null) }
+    // Coordinates are saved as Android Bundle-compatible numbers; GeoPoint itself
+    // is not automatically saveable by Compose. This preserves the last route
+    // origin if Android still recreates the Activity (memory pressure or settings).
+    var originLatitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var originLongitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    val routeOrigin = if (originLatitude != null && originLongitude != null) {
+        GeoPoint(originLatitude!!, originLongitude!!)
+    } else null
+    val latestRouteOrigin by rememberUpdatedState(routeOrigin)
+    fun setRouteOrigin(point: GeoPoint?) {
+        originLatitude = point?.latitude
+        originLongitude = point?.longitude
+    }
 
     fun navigateTo(siteId: String) {
         offRouteFixes = 0
         rerouteStatus = null
         // Take the freshest GPS fix at the moment the user taps a destination.
-        routeOrigin = livePosition ?: routeOrigin
+        setRouteOrigin(livePosition ?: routeOrigin)
         selectedId = siteId
         directToSite = true
         followMe = true
@@ -199,9 +216,9 @@ fun RoutePlannerScreen() {
                     (!location.hasBearingAccuracy() ||
                         location.bearingAccuracyDegrees <= 45f))
                     location.bearing else null
-                val last = routeOrigin
+                val last = latestRouteOrigin
                 if (last == null) {
-                    routeOrigin = fix
+                    setRouteOrigin(fix)
                 } else {
                     val distance = FloatArray(1)
                     Location.distanceBetween(
@@ -211,7 +228,7 @@ fun RoutePlannerScreen() {
                     // The full-route overview refreshes occasionally as before.
                     // During active turn-by-turn navigation, only a confirmed
                     // deviation requests a new road route to avoid server flooding.
-                    if (!isFollowingNavigation && distance[0] >= 250f) routeOrigin = fix
+                    if (!isFollowingNavigation && distance[0] >= 250f) setRouteOrigin(fix)
                 }
             }
         }
@@ -274,7 +291,7 @@ fun RoutePlannerScreen() {
             lastRerouteAt = now
             offRouteFixes = 0
             val fresh = livePosition ?: return@LaunchedEffect
-            routeOrigin = fresh
+            setRouteOrigin(fresh)
             rerouteCount++
             rerouteStatus = "Recalculating from your current location…"
         } else if (offRouteFixes > 0) {
