@@ -1,4 +1,4 @@
-# Site Route Planner v0.3 (Android)
+# Site Route Planner v0.4 (Android)
 
 **Native Android APK — in-app waypoint map and driving-road route.**
 
@@ -10,6 +10,18 @@
 - Restoration is replace-all (not merge). Back up your current data before restoring an older file.
 - Backups are manually saved; no automatic sync, cloud account, or scheduled cloud backup exists. The chosen document provider may upload the file depending on where you save it.
 - Existing Android app data can be lost when uninstalling or replacing apps signed with a different debug key. Make a backup using an already installed compatible version before uninstalling. **Version 0.2 does not contain an export feature**, so a failed APK update may require manually re-entering stops into 0.3.
+
+## Map visibility fix in 0.4
+- Checkpoint pins use **persistent GeoJSON layers**, not legacy markers that are cleared and recreated on every state change.
+- Selecting a list draws all of that list's stored stops on the map, regardless of completion status. The map camera fits ALL selected-list pins after layout. Pin numbers match saved ordering.
+- A **blue line** follows calculated driving roads (OSRM) through all pending checkpoints in the selected order.
+- If OSRM fails or is still loading, an **orange dashed preview** joins checkpoints to show sequence ONLY; it is **not** a drivable route and must not be used for driving directions.
+- GPS is optional for visualizing multiple saved stops. GPS is needed to route from your current position to a single stop.
+- Tap the numbered map locations to choose which pending stop goes next.
+- This fixes map data drawing and positioning but has **not been validated on a physical phone**.
+
+## Installing updates
+Android apps can update in place only if the package name and signing certificate match. GitHub Actions' default debug keystore may vary between builds, so **debug APK updates may require uninstalling**. That is a build signing issue, not how final production updates should work. Before uninstalling 0.3, use **Backup → Back up all routes to file**, then after installing 0.4 use **Backup → Restore routes from file**. Never uninstall without a backup if stops are important. A private, persistent release signing key is required for reliable future in-place updates; do not commit a private signing key to a public repository.
 
 ## One-map workflow
 - Start on a single MapLibre map, with no Google Maps redirect.
