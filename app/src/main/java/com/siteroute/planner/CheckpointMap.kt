@@ -47,6 +47,7 @@ private const val PREVIEW = "srp-preview"
 fun CheckpointMap(
     sites: List<Site>,
     selectedSiteId: String?,
+    focusedSiteId: String?,
     currentLocation: GeoPoint?,
     roadRoute: RoadRoute?,
     routeWaypoints: List<GeoPoint>,
@@ -123,7 +124,7 @@ fun CheckpointMap(
     )
 
     // Map updates are driven by *data changes*, not asynchronous getMapAsync callback races.
-    LaunchedEffect(styleReady, mapObject, sites, selectedSiteId, currentLocation,
+    LaunchedEffect(styleReady, mapObject, sites, selectedSiteId, focusedSiteId, currentLocation,
         roadRoute, routeWaypoints, listId, refocusCount, followMe, mapSize) {
         val map = mapObject
         val style = map?.style
@@ -136,14 +137,48 @@ fun CheckpointMap(
         val fitKey = "$listId/$refocusCount/" +
             sites.joinToString { "${it.id}:${it.latitude}:${it.longitude}" }
         val gps = currentLocation
-        val cameraKey = if (followMe && gps != null)
-            "follow/${String.format(java.util.Locale.US, "%.4f,%.4f", gps.latitude, gps.longitude)}"
-        else fitKey
+        val cameraKey = when {
+            focusedSiteId != null -> {
+                // Also recenter when the first GPS fix or recalculated road geometry arrives.
+                val roadKey = roadRoute?.geometry?.let {
+                    "${it.size}/${it.firstOrNull()}/${it.lastOrNull()}"
+                } ?: "pending"
+                "target/$fitKey/$focusedSiteId/$roadKey/${gps != null}"
+            }
+            followMe && gps != null ->
+                "follow/${String.format(java.util.Locale.US, "%.4f,%.4f", gps.latitude, gps.longitude)}"
+            else -> fitKey
+        }
         if (cameraKey != lastFrameKey) {
             // Save only after camera successfully applies; view dimensions must exist.
             view.post {
                 if (view.width <= 0 || view.height <= 0 || map.style == null) return@post
-                if (followMe && gps != null) {
+                if (focusedSiteId != null) {
+                    val destination = sites.firstOrNull { it.id == focusedSiteId }
+                    if (destination != null) {
+                        // Tap a site: frame just the phone and the chosen destination,
+                        // including road detours once routing completes.
+                        val points = mutableListOf(LatLng(destination.latitude, destination.longitude))
+                        gps?.let { points += LatLng(it.latitude, it.longitude) }
+                        val road = roadRoute?.geometry.orEmpty()
+                        if (road.size > 2) {
+                            val step = (road.size / 120).coerceAtLeast(1)
+                            road.filterIndexed { index, _ -> index % step == 0 }.forEach {
+                                points += LatLng(it.latitude, it.longitude)
+                            }
+                        }
+                        val distinct = points.distinctBy {
+                            "${(it.latitude * 100000).toInt()}:${(it.longitude * 100000).toInt()}"
+                        }
+                        if (distinct.size == 1) {
+                            map.animateCamera(CameraUpdateFactory.newLatLngZoom(distinct.first(), 14.0))
+                        } else {
+                            val bounds = LatLngBounds.Builder()
+                            distinct.forEach(bounds::include)
+                            map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(), 66))
+                        }
+                    }
+                } else if (followMe && gps != null) {
                     map.animateCamera(
                         CameraUpdateFactory.newLatLngZoom(LatLng(gps.latitude, gps.longitude), 15.5)
                     )
@@ -237,10 +272,14 @@ private fun applyPoints(
     pointsSource(style, PENDING, numbered.filter {
         it.first.status == "pending" && it.first.id != selectedId
     }.map { it.second })
-    pointsSource(style, DONE, numbered.filter { it.first.status == "visited" }.map { it.second })
-    pointsSource(style, SKIPPED, numbered.filter { it.first.status == "skipped" }.map { it.second })
+    pointsSource(style, DONE, numbered.filter {
+        it.first.status == "visited" && it.first.id != selectedId
+    }.map { it.second })
+    pointsSource(style, SKIPPED, numbered.filter {
+        it.first.status == "skipped" && it.first.id != selectedId
+    }.map { it.second })
     pointsSource(style, SELECTED, numbered.filter {
-        it.first.status == "pending" && it.first.id == selectedId
+        it.first.id == selectedId
     }.map { it.second })
     pointsSource(style, GPS, if (gps == null) emptyList() else listOf(
         Feature.fromGeometry(Point.fromLngLat(gps.longitude, gps.latitude))
