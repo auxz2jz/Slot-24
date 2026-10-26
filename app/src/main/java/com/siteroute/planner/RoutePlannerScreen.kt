@@ -9,6 +9,8 @@ import android.location.LocationManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -20,6 +22,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.withContext
 
 /**
@@ -42,6 +48,64 @@ fun RoutePlannerScreen() {
     var showTurns by remember { mutableStateOf(false) }
     var followMe by remember { mutableStateOf(false) }
     var refocusCount by remember { mutableIntStateOf(0) }
+    var backupMenu by remember { mutableStateOf(false) }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+    var backupSnapshot by remember { mutableStateOf<String?>(null) }
+    var restoreCandidate by remember { mutableStateOf<PlannerData?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // Android's document picker allows local or cloud backups without storage permissions.
+    val saveBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(PlannerBackupCodec.MIME)
+    ) { uri ->
+        val snapshot = backupSnapshot
+        backupSnapshot = null
+        if (uri != null && snapshot != null) {
+            scope.launch {
+                backupMessage = try {
+                    withContext(Dispatchers.IO) {
+                        val stream = context.contentResolver.openOutputStream(uri, "wt")
+                            ?: error("Could not open the selected destination.")
+                        stream.use { it.write(snapshot.toByteArray(Charsets.UTF_8)) }
+                    }
+                    "Backup saved. Keep the JSON file somewhere safe."
+                } catch (e: Exception) {
+                    "Backup failed: " + (e.message ?: "Could not write the file.")
+                }
+            }
+        }
+    }
+    val openBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val json = withContext(Dispatchers.IO) {
+                        val input = context.contentResolver.openInputStream(uri)
+                            ?: error("Could not open the selected backup.")
+                        input.use { stream ->
+                            val output = ByteArrayOutputStream()
+                            val block = ByteArray(8192)
+                            while (true) {
+                                val count = stream.read(block)
+                                if (count < 0) break
+                                require(output.size() + count <= PlannerBackupCodec.MAX_BYTES) {
+                                    "Backup is larger than 8 MB."
+                                }
+                                output.write(block, 0, count)
+                            }
+                            output.toString("UTF-8")
+                        }
+                    }
+                    restoreCandidate = PlannerBackupCodec.decode(json)
+                } catch (e: Exception) {
+                    backupMessage = "Restore failed: " +
+                        (e.message ?: "The selected file is not a valid backup.")
+                }
+            }
+        }
+    }
 
     fun update(newData: PlannerData) {
         data = newData
@@ -52,7 +116,9 @@ fun RoutePlannerScreen() {
     val pending = allSites.filter { it.status == "pending" }
     val nextSite = pending.firstOrNull { it.id == selectedId } ?: pending.firstOrNull()
     val routeSites = if (nextSite == null) emptyList() else {
-        listOf(nextSite) + pending.filterNot { it.id == nextSite.id }
+        // Preserve the list's manual order, starting at the chosen next checkpoint.
+        val start = pending.indexOfFirst { it.id == nextSite.id }
+        pending.drop(start) + pending.take(start)
     }
     val currentList = data.lists.firstOrNull { it.id == data.activeListId }
 
@@ -161,11 +227,47 @@ fun RoutePlannerScreen() {
             if (it.id == site.id) it.copy(status = status) else it
         })
         update(updated)
-        selectedId = RouteLogic.nextPending(updated)?.id
+        selectedId = if (site.id == nextSite?.id) {
+            routeSites.drop(1).firstOrNull { it.id != site.id }?.id
+        } else {
+            nextSite?.id ?: RouteLogic.nextPending(updated)?.id
+        }
     }
 
     Scaffold(topBar = {
-        TopAppBar(title = { Text("Site Route Planner") })
+        TopAppBar(
+            title = { Text("Site Route Planner") },
+            actions = {
+                Box {
+                    TextButton(onClick = { backupMenu = true }) { Text("Backup") }
+                    DropdownMenu(
+                        expanded = backupMenu,
+                        onDismissRequest = { backupMenu = false }
+                    ) {
+                        DropdownMenuItem(text = { Text("Back up all routes to file") },
+                            onClick = {
+                                backupMenu = false
+                                try {
+                                    backupSnapshot = PlannerBackupCodec.encode(data)
+                                    val date = LocalDateTime.now().format(
+                                        DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm")
+                                    )
+                                    saveBackup.launch("site-routes-$date.json")
+                                } catch (e: Exception) {
+                                    backupMessage = e.message ?: "Could not prepare backup."
+                                }
+                            })
+                        DropdownMenuItem(text = { Text("Restore routes from file") },
+                            onClick = {
+                                backupMenu = false
+                                openBackup.launch(arrayOf(
+                                    "application/json", "text/plain", "application/octet-stream"
+                                ))
+                            })
+                    }
+                }
+            }
+        )
     }) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 10.dp)
@@ -201,7 +303,7 @@ fun RoutePlannerScreen() {
             ) {
                 Button(onClick = { addSite = true }) { Text("+ Site") }
                 OutlinedButton(onClick = { manageStops = true }) {
-                    Text("Stops (${pending.size})")
+                    Text("Stops (${allSites.size})")
                 }
                 OutlinedButton(onClick = {
                     followMe = false
@@ -221,6 +323,24 @@ fun RoutePlannerScreen() {
                 }
             }
 
+            if (allSites.isNotEmpty()) {
+                // Show the entire selected list in order, including visited/skipped stops.
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    allSites.forEachIndexed { index, stop ->
+                        AssistChip(
+                            onClick = { if (stop.status == "pending") selectedId = stop.id },
+                            label = {
+                                Text("${index + 1}. ${stop.name}" +
+                                    if (stop.status == "visited") " ✓" else
+                                    if (stop.status == "skipped") " –" else "")
+                            }
+                        )
+                    }
+                }
+            }
             CheckpointMap(
                 sites = allSites,
                 selectedSiteId = nextSite?.id,
@@ -308,6 +428,43 @@ fun RoutePlannerScreen() {
             }
             Spacer(Modifier.height(5.dp))
         }
+    }
+
+    if (backupMessage != null) {
+        AlertDialog(
+            onDismissRequest = { backupMessage = null },
+            title = { Text("Backup / Restore") },
+            text = { Text(backupMessage.orEmpty()) },
+            confirmButton = {
+                TextButton(onClick = { backupMessage = null }) { Text("OK") }
+            }
+        )
+    }
+    restoreCandidate?.let { candidate ->
+        AlertDialog(
+            onDismissRequest = { restoreCandidate = null },
+            title = { Text("Restore this backup?") },
+            text = {
+                Text("The file contains ${candidate.lists.size} routes and " +
+                    "${candidate.sites.size} stops. Restoring will REPLACE all " +
+                    "routes and progress currently saved on this device. " +
+                    "Make a backup of your current data first if you want to keep it.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    update(candidate)
+                    selectedId = null
+                    followMe = false
+                    refocusCount++
+                    restoreCandidate = null
+                    backupMessage = "Backup restored: ${candidate.lists.size} routes, " +
+                        "${candidate.sites.size} stops."
+                }) { Text("Replace and restore") }
+            },
+            dismissButton = {
+                TextButton(onClick = { restoreCandidate = null }) { Text("Cancel") }
+            }
+        )
     }
 
     if (showTurns) {

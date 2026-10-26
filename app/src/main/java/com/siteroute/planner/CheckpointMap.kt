@@ -1,6 +1,12 @@
 package com.siteroute.planner
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Typeface
+import org.maplibre.android.annotations.IconFactory
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
@@ -52,10 +58,41 @@ fun CheckpointMap(
     val latestList by rememberUpdatedState(listId)
     var cameraKey by remember { mutableStateOf("") }
 
+    // Numbered markers correspond exactly to the saved order, including completed stops.
+    fun numberIcon(number: Int, status: String, selected: Boolean): org.maplibre.android.annotations.Icon {
+        val bitmap = Bitmap.createBitmap(96, 112, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val bg = when {
+            selected -> Color.rgb(218, 61, 46)
+            status == "visited" -> Color.rgb(39, 137, 82)
+            status == "skipped" -> Color.GRAY
+            else -> Color.rgb(22, 108, 227)
+        }
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bg }
+        val tail = Path().apply {
+            moveTo(30f, 68f)
+            lineTo(48f, 105f)
+            lineTo(66f, 68f)
+            close()
+        }
+        canvas.drawPath(tail, paint)
+        canvas.drawCircle(48f, 44f, 35f, paint)
+        paint.color = Color.WHITE
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3.5f
+        canvas.drawCircle(48f, 44f, 34f, paint)
+        paint.style = Paint.Style.FILL
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = if (number >= 100) 26f else 36f
+        canvas.drawText(number.toString(), 48f, 56f, paint)
+        return IconFactory.getInstance(context).fromBitmap(bitmap)
+    }
+
     fun draw(map: MapLibreMap) {
         val style = map.style ?: return
         map.clear()
-        latestSites.forEach { site ->
+        latestSites.forEachIndexed { index, site ->
             val flag = when {
                 site.id == latestSelection && site.status == "pending" -> "NEXT • "
                 site.status == "visited" -> "DONE • "
@@ -65,8 +102,9 @@ fun CheckpointMap(
             map.addMarker(
                 MarkerOptions()
                     .position(LatLng(site.latitude, site.longitude))
-                    .title(flag + site.name)
+                    .title("${index + 1}. " + flag + site.name)
                     .snippet(site.id)
+                    .icon(numberIcon(index + 1, site.status, site.id == latestSelection))
             )
         }
         latestGps?.let {
@@ -115,9 +153,9 @@ fun CheckpointMap(
                     LatLng(gps.latitude, gps.longitude), 15.5
                 ))
             } else {
-                val pending = latestSites.filter { it.status == "pending" }
-                val shown = (if (gps != null) listOf(gps) else emptyList()) +
-                    pending.map { GeoPoint(it.latitude, it.longitude) }
+                val shown = if (latestSites.isNotEmpty()) {
+                    latestSites.map { GeoPoint(it.latitude, it.longitude) }
+                } else if (gps != null) listOf(gps) else emptyList()
                 if (shown.size >= 2) {
                     val bounds = LatLngBounds.Builder()
                     shown.forEach { bounds.include(LatLng(it.latitude, it.longitude)) }
