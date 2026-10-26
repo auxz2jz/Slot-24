@@ -301,7 +301,10 @@ private fun SiteEditor(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 OutlinedTextField(name, { name = it }, label = { Text("Site name *") }, singleLine = true)
-                OutlinedTextField(address, { address = it }, label = { Text("Street address or place") })
+                OutlinedTextField(address, { newAddress ->
+                    if (newAddress != address) { lat = ""; lon = "" }
+                    address = newAddress
+                }, label = { Text("Street address or place") })
                 Text("Enter an address OR coordinates. Address lookup needs internet.",
                     style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
