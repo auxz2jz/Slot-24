@@ -1,4 +1,4 @@
-# Site Route Planner v0.4 (Android)
+# Site Route Planner v0.5 (Android)
 
 **Native Android APK — in-app waypoint map and driving-road route.**
 
@@ -10,6 +10,15 @@
 - Restoration is replace-all (not merge). Back up your current data before restoring an older file.
 - Backups are manually saved; no automatic sync, cloud account, or scheduled cloud backup exists. The chosen document provider may upload the file depending on where you save it.
 - Existing Android app data can be lost when uninstalling or replacing apps signed with a different debug key. Make a backup using an already installed compatible version before uninstalling. **Version 0.2 does not contain an export feature**, so a failed APK update may require manually re-entering stops into 0.3.
+
+## One-screen driving layout in 0.5
+- Select any saved list from the dropdown (e.g. **My Stops** or **Test**); the map shows every stop as a numbered pin.
+- The **vertical, scrollable sites list is below the map**. Tap any site, including a previously visited site, to show the estimated fastest road route from the phone's current GPS position **to only that site**. The map frames your position and the destination, plus the road geometry when it arrives. No other app is opened.
+- Press **Full route** to connect all pending checkpoints in saved order, not just the last tapped destination. This mode redraws the driving-road route when a stop is completed/skipped or the order changes.
+- Beside each site in the vertical list, tap **↑** or **↓** to move its saved visit order. The numbers on the map and the road route will follow the new order. You can also reorder in Stops.
+- **Done → Next** or **Skip → Next** updates progress and advances to the next unfinished stop if navigating to a site, or redraws the full route if showing the whole itinerary.
+- The routing server finds a road route using travel-time estimates **without current traffic data**. "Fastest" means estimated driving time using map data, **not guaranteed fastest with live traffic**. Your GPS and checkpoint coordinates are shared with the OSRM demo server for each request.
+- Selecting a single destination needs a GPS location fix and internet access. In that mode we do not substitute a fake straight-line route when GPS or routing is unavailable.
 
 ## Map visibility fix in 0.4
 - Checkpoint pins use **persistent GeoJSON layers**, not legacy markers that are cleared and recreated on every state change.
